@@ -46,7 +46,7 @@ def try_socket():
     # s.sendall("GET /\r\n")
     s.send('GET / HTTP/1.1\nHost: stackoverflow.com\n\n')
     print s.recv(256)
-    s.close
+    s.close()
 
 def get_connection(url, context):
     # Get an OpenSSL connection
@@ -54,8 +54,8 @@ def get_connection(url, context):
 
     parsed_url = urlparse(url)
 
-    sock.connect((url, 80))
-    sock.send("CONNECT %s:80 HTTP/1.0\n\n" % url)
+    #sock.connect((url, 80))
+    #sock.send("CONNECT %s:80 HTTP/1.0\n\n" % url)
 
     #sock.send("CONNECT %s:%s HTTP/1.0\n\n" % (parsed_url.netloc, parsed_url.port))
 
@@ -88,27 +88,38 @@ def get_SSL_method(args):
 def scurl(args):
     # Decide on which SSL protocol to use
     tls_method = get_SSL_method(args)
+    print "TLS Version: %s" % tls_method
 
     # Get the context
     context = get_context(tls_method, args.ciphers)
 
     for url in args.urls:
-        sock = get_connection(url, context)
-        #sock.connect((url, 80))
-        while 1:
-            line = sys.stdin.readline()
-            if line == '':
-                break
-            try:
-                sock.send(line)
-                sys.stdout.write(sock.recv(1024))
-                sys.stdout.flush()
-            except OpenSSL.SSL.Error:
-                print 'Connection died unexpectedly'
-                break
+        # Make a connection using the specified url
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        connection = OpenSSL.SSL.Connection(context, sock)
 
-        sock.shutdown()
-        sock.close()
+        try:
+            connection.connect((url, 80))
+        except:
+            sys.stderr.write("Conneciton refused.\n")
+            exit(1)
+
+        # Make a request
+        message = 'GET / HTTP/1.1\nHost: %s\n\n' % url
+        print "MESSAGE:\n%s" % message
+        connection.send(message)
+        sys.stdout.flush()
+
+        # Listen to the socket
+        try:
+            print connection.recv(256)
+            sys.stdout.flush()
+        except OpenSSL.SSL.Error:
+                print 'Connection died unexpectedly'
+                continue
+
+        connection.shutdown()
+        connection.close()
 
 def main():
     # Command Line Argument parsing
@@ -142,7 +153,7 @@ def main():
 
     args = parser.parse_args()
 
-    # Pass off the arguments to be curl'd
+    # Pass off arguments to be curl'd
     scurl(args)
 
 
