@@ -8,10 +8,23 @@ import sys
 
 import argparse
 
+
+def get_from(url, port=80):
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((url, port))
+    s.send('GET / HTTP/1.1\nHost:%s\n\n' % url)
+    packet = s.recv(256)
+    s.close()
+    return packet
+
+
 def try_socket():
+
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     # s.bind(('',80))  ?
+
 
     s.connect(("stackoverflow.com" , 80))
     # s.sendall("GET /\r\n")
@@ -20,11 +33,23 @@ def try_socket():
     s.close
 
 
+def scurl(args):
+
+    # Get the list of ciphers
+    ciphers = args.ciphers.split(":") if args.ciphers is not None else None
+
+    for url in args.urls:
+        print "Requesting: %s" % url
+        print get_from(url)
+        print ""
+
 
 def main():
     # Argument parsing
     description = "CS255: scurl - transfer a URL"
     parser = argparse.ArgumentParser(description=description)
+
+    parser.add_argument("urls", nargs="+", help="List of URLs to make requests from")
 
     version_group = parser.add_argument_group("Versions")
     version_group.add_argument("--tlsv1.0", dest="tlsv1_0", action="store_true",
@@ -39,23 +64,20 @@ def main():
     version_group.add_argument("-3", "--sslv3", dest="sslv3", action="store_true",
                                help="(SSL) Forces curl to use SSL version 3 when negotiating with a remote SSL server.")
 
-    parser.add_argument("--ciphers", help="(TLS) Specify which ciphers to use in the connection with a colon-separated list.")
+    parser.add_argument("--ciphers", nargs=1, help="(TLS) Specify which ciphers to use in the connection with a colon-separated list.")
 
-    parser.add_argument("--crlfile", help="(TLS) Provide a file using PEM format with a Certificate Revocation List that may specify peer certificates that are to be considered revoked.")
+    parser.add_argument("--crlfile", nargs=1, help="(TLS) Provide a file using PEM format with a Certificate Revocation List that may specify peer certificates that are to be considered revoked.")
 
-    parser.add_argument("--cacert", help="(TLS) Tells curl to use the specified certificate file to verify the peer.")
+    parser.add_argument("--cacert", nargs=1, help="(TLS) Tells curl to use the specified certificate file to verify the peer.")
 
-    parser.add_argument("--allow-stale-certs", type=int, help="Accept a certificate C as valid if (a) C is an otherwise valid certificate that has expired and (b) C expired within the past N days.")
+    parser.add_argument("--allow-stale-certs", type=int, nargs=1, help="Accept a certificate C as valid if (a) C is an otherwise valid certificate that has expired and (b) C expired within the past N days.")
 
-    parser.add_argument("--pinnedcertificate", help="Provide a public-key file in PEM format.")
+    parser.add_argument("--pinnedcertificate", nargs=1, help="Provide a public-key file in PEM format.")
 
     args = parser.parse_args()
 
-
-
-
-    try_socket()
-
+    # Pass off the arguments to be curled
+    scurl(args)
 
 
 if __name__ == '__main__':
