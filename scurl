@@ -48,7 +48,7 @@ def try_socket():
     print s.recv(256)
     s.close
 
-def get_connection(url, method):
+def get_connection(url, context):
     # Get an OpenSSL connection
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -58,9 +58,16 @@ def get_connection(url, method):
     sock.send("CONNECT %s:80 HTTP/1.0\n\n" % url)
 
     #sock.send("CONNECT %s:%s HTTP/1.0\n\n" % (parsed_url.netloc, parsed_url.port))
-    context = OpenSSL.SSL.Context(method)
+
     connection = OpenSSL.SSL.Connection(context, sock)
     return connection
+
+def get_context(method, ciphers):
+    # Initialize the context
+    context = OpenSSL.SSL.Context(method)
+    if ciphers is not None:
+        context.set_cipher_list(ciphers)
+    return context
 
 def get_SSL_method(args):
     # This function is for getting the SSL method
@@ -79,23 +86,29 @@ def get_SSL_method(args):
         return OpenSSL.SSL.TLSv1_2_METHOD
 
 def scurl(args):
-
-    # Split the list of ciphers -- not quite sure what to do with these yet...
-    ciphers = args.ciphers.split(":") if args.ciphers is not None else None
-
     # Decide on which SSL protocol to use
     tls_method = get_SSL_method(args)
 
+    # Get the context
+    context = get_context(tls_method, args.ciphers)
+
     for url in args.urls:
-        connection = get_connection(url, tls_method)
-        msg = "GET / HTTP/1.0\nHost: %s\n\n" % url
-        print "message:\n%s" % msg
-        connection.send(msg)
-        while True:
-            try:
-                print connection.recv(4096)
-            except OpenSSL.SSL.ZeroReturnError:
+        sock = get_connection(url, context)
+        #sock.connect((url, 80))
+        while 1:
+            line = sys.stdin.readline()
+            if line == '':
                 break
+            try:
+                sock.send(line)
+                sys.stdout.write(sock.recv(1024))
+                sys.stdout.flush()
+            except OpenSSL.SSL.Error:
+                print 'Connection died unexpectedly'
+                break
+
+        sock.shutdown()
+        sock.close()
 
 def main():
     # Command Line Argument parsing
