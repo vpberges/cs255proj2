@@ -15,53 +15,6 @@ import socket
 from urlparse import urlparse
 import argparse
 
-def get_from(url):
-
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    ctx = OpenSSL.SSL.Context(OpenSSL.SSL.SSLv23_METHOD)
-    conn = OpenSSL.SSL.Connection(ctx, s)
-
-    parsed_url = urlparse(url)
-    proxy = (parsed_url.netloc, parsed_url.port)
-    try:
-        s.connect(proxy)
-    except socket.error, e:
-        print "Unable to connect to %s:%s %s" % (proxy[0], proxy[1], str(e))
-        sys.exit(-1)
-
-    s.send('GET / HTTP/1.1\nHost:%s\n\n' % url)
-    packet = s.recv(256)
-    s.shutdown()
-    s.close()
-    return packet
-
-def try_socket():
-
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    # s.bind(('',80))  ?
-
-    s.connect(("stackoverflow.com" , 80))
-    # s.sendall("GET /\r\n")
-    s.send('GET / HTTP/1.1\nHost: stackoverflow.com\n\n')
-    print s.recv(256)
-    s.close()
-
-def get_connection(url, context):
-    # Get an OpenSSL connection
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    parsed_url = urlparse(url)
-
-    #sock.connect((url, 80))
-    #sock.send("CONNECT %s:80 HTTP/1.0\n\n" % url)
-
-    #sock.send("CONNECT %s:%s HTTP/1.0\n\n" % (parsed_url.netloc, parsed_url.port))
-
-    connection = OpenSSL.SSL.Connection(context, sock)
-    return connection
-
 def get_context(method, ciphers, pem_file):
     # Initialize the context
     context = OpenSSL.SSL.Context(method)
@@ -118,6 +71,7 @@ def scurl(args):
             sys.stderr.write("Could not connect.\n")
             exit(1)
 
+        # Do the connection handshake
         connection.do_handshake()
 
         # Make a request
@@ -129,11 +83,18 @@ def scurl(args):
         print "MESSAGE:\n%s" % message
         connection.send(message)
 
+        content_end = "\r\n0\r\n\r\n"
+
         # Listen to the socket
         try:
             while True:
-                sys.stdout.write(connection.recv(1024))
+                packet = connection.recv(1024)
+                sys.stdout.write(packet)
                 sys.stdout.flush()
+
+                if packet.endswith(content_end):
+                    break
+
         except OpenSSL.SSL.Error:
             print 'Connection died unexpectedly'
             continue
