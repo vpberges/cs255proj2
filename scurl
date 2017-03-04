@@ -19,7 +19,7 @@ import argparse
 class SecureCurl(object):
     # This class implements the functionality of
 
-    def __init__(self, method, ciphers=None, crlfile=None, pk_file=None,
+    def __init__(self, method, ciphers=None, crlfile=None, pinnedcertificate=None,
                  certificate=None, allow_stale_certs=False):
 
         self.default_port = 443 # Default port for HTTPS requests
@@ -32,7 +32,7 @@ class SecureCurl(object):
         self.method = method
         self.crlfile = crlfile
         self.certificate = certificate
-        self.pk_file = pk_file
+        self.pinnedcertificate = pinnedcertificate
         self.allow_stale_certs = allow_stale_certs
 
     def make_context(self):
@@ -47,8 +47,8 @@ class SecureCurl(object):
         context.set_verify(OpenSSL.SSL.VERIFY_NONE, verify)
 
         # Set the Pem file if necessary
-        if self.pk_file is not None:
-            context.use_privatekey_file(self.pk_file)
+        if self.pinnedcertificate is not None:
+            context.use_privatekey_file(self.pinnedcertificate)
 
         return context
 
@@ -131,7 +131,7 @@ def scurl(args):
     secure_curler = SecureCurl(method,
                                ciphers=args.ciphers,
                                crlfile=args.crlfile,
-                               pk_file=args.pinnedcertificate,
+                               pinnedcertificate=args.pinnedcertificate,
                                certificate=args.cacert,
                                allow_stale_certs=args.allow_stale_certs)
 
@@ -162,11 +162,11 @@ def main():
 
     parser.add_argument("--crlfile", nargs=1, help="(TLS) Provide a file using PEM format with a Certificate Revocation List that may specify peer certificates that are to be considered revoked.")
 
-    parser.add_argument("--cacert", nargs=1, help="(TLS) Tells curl to use the specified certificate file to verify the peer.")
+    parser.add_argument("--cacert", nargs=1, help="(TLS) Tells curl to use the specified certificate file to verify the peer. The file may contain only one CA certificate. The certificate must be in PEM format. Normally curl is built to use a default file for this, so this option is typically used to alter that default file.")
 
     parser.add_argument("--allow-stale-certs", type=int, nargs=1, dest="allow_stale_certs", help="Accept a certificate C as valid if (a) C is an otherwise valid certificate that has expired and (b) C expired within the past N days.")
 
-    parser.add_argument("--pinnedcertificate", nargs=1, help="Provide a public-key file in PEM format.")
+    parser.add_argument("--pinnedcertificate", nargs=1, help="Provide a public-key certificate file in PEM format. When a user passes this argument, the TLSl client will only send an application data to server if the server's TLS certificate is exactly the one contained in the specified file.")
 
     args = parser.parse_args()
 
