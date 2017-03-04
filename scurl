@@ -35,6 +35,9 @@ class SecureCurl(object):
         self.pinnedcertificate = pinnedcertificate
         self.allow_stale_certs = allow_stale_certs
 
+        self.revocations = None
+        self.set_CRL()
+
     def make_context(self):
         # Initialize the context
         context = OpenSSL.SSL.Context(self.method)
@@ -45,6 +48,14 @@ class SecureCurl(object):
 
         context.set_timeout(self.timeout)
 
+        # Set the Pem file if necessary
+        if self.pinnedcertificate is not None:
+            context.use_privatekey_file(self.pinnedcertificate)
+
+        context.set_verify(OpenSSL.SSL.VERIFY_NONE, self.verify)
+        return context
+
+    def set_CRL(self):
         # Set the Certificate Revocation List if provided
         if self.crlfile is not None:
             try:
@@ -55,15 +66,22 @@ class SecureCurl(object):
                 exit(1)
 
             crl = OpenSSL.crypto.load_crl(OpenSSL.crypto.FILETYPE_PEM, crl_buff)
-            revs = crl.get_revoked()
+            self.revocations = set(map(lambda x: x.get_serial(), crl.get_revoked()))
 
 
-        # Set the Pem file if necessary
-        if self.pinnedcertificate is not None:
-            context.use_privatekey_file(self.pinnedcertificate)
 
-        context.set_verify(OpenSSL.SSL.VERIFY_NONE, verify)
-        return context
+    def verify(self, conn, cert, errnum, depth, ok):
+        # Verify the certificate in the given context
+
+        print 'Got certificate: %s' % cert.get_subject()
+
+        # Check to see if it's on the CRL
+        if self.revocations is not None:
+            if cert.get_serial() in self.revocations:
+                print "Revoked certificate"
+                return errnum
+
+        return ok
 
     def curl_urls(self, urls):
 
@@ -120,11 +138,6 @@ def get_SSL_method(args):
     else:
         # Default to TLS 1.2
         return OpenSSL.SSL.TLSv1_2_METHOD
-
-def verify(conn, cert, errnum, depth, ok):
-    # This obviously has to be updated
-    print 'Got certificate: %s' % cert.get_subject()
-    return ok
 
 def format_http_request(url):
     # This is how to format an HTTP request
