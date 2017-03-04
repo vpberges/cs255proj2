@@ -68,8 +68,6 @@ class SecureCurl(object):
             crl = OpenSSL.crypto.load_crl(OpenSSL.crypto.FILETYPE_PEM, crl_buff)
             self.revocations = set(map(lambda x: x.get_serial(), crl.get_revoked()))
 
-
-
     def verify(self, conn, cert, errnum, depth, ok):
         # Verify the certificate in the given context
 
