@@ -131,8 +131,9 @@ def scurl(args):
 
         # Listen to the socket
         try:
-            print connection.recv(256)
-            sys.stdout.flush()
+            while True:
+                sys.stdout.write(connection.recv(1024))
+                sys.stdout.flush()
         except OpenSSL.SSL.Error:
             print 'Connection died unexpectedly'
             continue
