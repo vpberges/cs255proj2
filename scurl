@@ -17,7 +17,7 @@ import argparse
 
 
 class SecureCurl(object):
-    # This class implements the functionality of
+    # This class implements the functionality of curl but with TLS
 
     def __init__(self, method, ciphers=None, crlfile=None, pinnedcertificate=None,
                  certificate=None, allow_stale_certs=False):
@@ -44,16 +44,28 @@ class SecureCurl(object):
             context.set_cipher_list(self.ciphers)
 
         context.set_timeout(self.timeout)
-        context.set_verify(OpenSSL.SSL.VERIFY_NONE, verify)
+
+        # Set the Certificate Revocation List if provided
+        if self.crlfile is not None:
+            try:
+                f = open(self.crlfile, 'r')
+                crl_buff = f.read()
+            except:
+                sys.stderr.write("Error reading CRL file: %s" % self.crlfile)
+                exit(1)
+
+            crl = OpenSSL.crypto.load_crl(OpenSSL.crypto.FILETYPE_PEM, crl_buff)
+            revs = crl.get_revoked()
+
 
         # Set the Pem file if necessary
         if self.pinnedcertificate is not None:
             context.use_privatekey_file(self.pinnedcertificate)
 
+        context.set_verify(OpenSSL.SSL.VERIFY_NONE, verify)
         return context
 
     def curl_urls(self, urls):
-        # Decide on which SSL protocol to use
 
         # Get the context
         self.context = self.make_context()
@@ -66,10 +78,10 @@ class SecureCurl(object):
             try:
                 connection.connect((url, self.default_port))
             except:
-                sys.stderr.write("Could not connect.\n")
+                sys.stderr.write("Could not establish connection.")
                 exit(1)
 
-            # Do the connection handshake
+            # Do the connection (secret) handshake
             connection.do_handshake()
 
             # Make a HTTP request
