@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 '''
-This script is supposed to be for making a Certificate Revocation List that we can use
-to test out out scurl
+This script is for making a Certificate Revocation List that we can use to test scurl
 '''
 
 import OpenSSL
@@ -12,10 +11,10 @@ urls = ['www.facebook.com', 'www.google.com', 'www.stanford.edu']
 method = OpenSSL.SSL.TLSv1_2_METHOD
 port = 443
 
-# Make a Certificate Revocation List object
+# Instantiate a Certificate Revocation List object
 crl = OpenSSL.crypto.CRL()
 
-# Make a Connection Object
+# Instantiate a Connection Object
 context = OpenSSL.SSL.Context(method)
 
 for url in urls:
@@ -26,6 +25,7 @@ for url in urls:
     connection.do_handshake()
 
     certificate = connection.get_peer_certificate()
+    print "Recieved certificate: %s" % certificate
 
     serial = certificate.get_serial_number()
     hex_serial = hex(serial)
@@ -40,8 +40,7 @@ for url in urls:
     connection.close()
 
 
-# Just kidding this only works in pyOpenSSL 16.0.0
+# Just kidding this only works in pyOpenSSL 16+
 crl_dump = OpenSSL.crypto.dump_crl(OpenSSL.crypto.FILETYPE_PEM, crl)
-#crl_dump =
 
 open(crlfile, 'w').write(crl_dump)
