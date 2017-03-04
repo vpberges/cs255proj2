@@ -42,5 +42,4 @@ for url in urls:
 
 # Just kidding this only works in pyOpenSSL 16+
 crl_dump = OpenSSL.crypto.dump_crl(OpenSSL.crypto.FILETYPE_PEM, crl)
-
 open(crlfile, 'w').write(crl_dump)
