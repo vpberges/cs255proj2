@@ -73,9 +73,16 @@ class SecureCurl(object):
 
         print 'Verifying certificate: %s' % cert.get_subject()
 
+        # Need to check the following:
+        # 1) url is the same as the one that we requested
+        # 2) the chain of certificates
+
         # Check to see if it's on the CRL
         if self.revocations is not None:
-            if cert.get_serial() in self.revocations:
+            serial_number = cert.get_serial_number()
+            print serial_number
+            exit()
+            if serial_number in self.revocations:
                 print "Revoked certificate"
                 return errnum
 
@@ -115,7 +122,7 @@ class SecureCurl(object):
                          break
 
             except OpenSSL.SSL.Error:
-                print 'Connection died unexpectedly'
+                sys.stderr.write("Connection died unexpectedly.\n")
                 continue
 
             connection.shutdown()
@@ -139,7 +146,7 @@ def get_SSL_method(args):
 
 def format_http_request(url):
     # This is how to format an HTTP request
-    request  = "GET / HTTP/1.1\r\n" \
+    request = "GET / HTTP/1.1\r\n" \
                   "Host: %s\r\n"\
                   "User-Agent: curl/7.52.1\n\r" \
                   "Accept: */*\r\n\r\n" % url
@@ -163,7 +170,7 @@ def scurl(args):
 
 def main():
     # Command Line Argument parsing
-    description = "CS255: scurl - transfer a URL"
+    description = "scurl - secure transfer a URL"
     parser = argparse.ArgumentParser(description=description)
 
     parser.add_argument("urls", nargs="+", help="List of URLs to make requests from")
@@ -181,15 +188,15 @@ def main():
     version_group.add_argument("-3", "--sslv3", dest="sslv3", action="store_true",
                                help="(SSL) Forces curl to use SSL version 3 when negotiating with a remote SSL server.")
 
-    parser.add_argument("--ciphers", nargs=1, help="(TLS) Specify which ciphers to use in the connection with a colon-separated list.")
+    parser.add_argument("--ciphers", help="(TLS) Specify which ciphers to use in the connection with a colon-separated list.")
 
-    parser.add_argument("--crlfile", nargs=1, help="(TLS) Provide a file using PEM format with a Certificate Revocation List that may specify peer certificates that are to be considered revoked.")
+    parser.add_argument("--crlfile", help="(TLS) Provide a file using PEM format with a Certificate Revocation List that may specify peer certificates that are to be considered revoked.")
 
-    parser.add_argument("--cacert", nargs=1, help="(TLS) Tells curl to use the specified certificate file to verify the peer. The file may contain only one CA certificate. The certificate must be in PEM format. Normally curl is built to use a default file for this, so this option is typically used to alter that default file.")
+    parser.add_argument("--cacert", help="(TLS) Tells curl to use ONLY the specified certificate file to verify the peer. The file may contain only one CA certificate. The certificate must be in PEM format. Normally curl is built to use a default file for this, so this option is typically used to alter that default file.")
 
-    parser.add_argument("--allow-stale-certs", type=int, nargs=1, dest="allow_stale_certs", help="Accept a certificate C as valid if (a) C is an otherwise valid certificate that has expired and (b) C expired within the past N days.")
+    parser.add_argument("--allow-stale-certs", type=int, dest="allow_stale_certs", help="Accept a certificate C as valid if (a) C is an otherwise valid certificate that has expired and (b) C expired within the past N days.")
 
-    parser.add_argument("--pinnedcertificate", nargs=1, help="Provide a public-key certificate file in PEM format. When a user passes this argument, the TLSl client will only send an application data to server if the server's TLS certificate is exactly the one contained in the specified file.")
+    parser.add_argument("--pinnedcertificate", help="Provide a public-key certificate file in PEM format. When a user passes this argument, the TLSl client will only send an application data to server if the server's TLS certificate is exactly the one contained in the specified file.")
 
     args = parser.parse_args()
 
