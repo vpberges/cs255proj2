@@ -62,11 +62,20 @@ def get_connection(url, context):
     connection = OpenSSL.SSL.Connection(context, sock)
     return connection
 
-def get_context(method, ciphers):
+def get_context(method, ciphers, pem_file):
     # Initialize the context
     context = OpenSSL.SSL.Context(method)
+
+    # Set the ciphers if necessary
     if ciphers is not None:
         context.set_cipher_list(ciphers)
+
+    context.set_verify(OpenSSL.SSL.VERIFY_NONE, verify)
+
+    # Set the Pem file if necessary
+    if pem_file is not None:
+        context.use_privatekey_file(pem_file)
+
     return context
 
 def get_SSL_method(args):
@@ -85,13 +94,21 @@ def get_SSL_method(args):
         # Default to TLS 1.2
         return OpenSSL.SSL.TLSv1_2_METHOD
 
+
+def verify(conn, cert, errnum, depth, ok):
+    # This obviously has to be updated
+    print 'Got certificate: %s' % cert.get_subject()
+    return ok
+
+
+
 def scurl(args):
     # Decide on which SSL protocol to use
     tls_method = get_SSL_method(args)
     print "TLS Version: %s" % tls_method
 
     # Get the context
-    context = get_context(tls_method, args.ciphers)
+    context = get_context(tls_method, args.ciphers, args.pinnedcertificate)
 
     for url in args.urls:
         # Make a connection using the specified url
@@ -101,14 +118,13 @@ def scurl(args):
         try:
             connection.connect((url, 80))
         except:
-            sys.stderr.write("Conneciton refused.\n")
+            sys.stderr.write("Could not connect.\n")
             exit(1)
 
         # Make a request
-        message = 'GET / HTTP/1.1\nHost: %s\n\n' % url
+        message = "GET /about/HTTP/1.0\nHost: %s\n\n" % url
         print "MESSAGE:\n%s" % message
-        connection.send(message)
-        sys.stdout.flush()
+        connection.send(message) #error
 
         # Listen to the socket
         try:
