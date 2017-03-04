@@ -17,18 +17,21 @@ crl = OpenSSL.crypto.CRL()
 
 # Make a Connection Object
 context = OpenSSL.SSL.Context(method)
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-connection = OpenSSL.SSL.Connection(context, sock)
 
 for url in urls:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    connection = OpenSSL.SSL.Connection(context, sock)
     # Open a connection
     connection.connect((url, port))
     connection.do_handshake()
+
     certificate = connection.get_peer_certificate()
     serial = certificate.get_serial_number()
-    print "Serial: %d" % serial
+    hex_serial = hex(serial)
+    print "%s Serial: %s" % (url, hex_serial)
+
     revoked = OpenSSL.crypto.Revoked()
-    revoked.set_serial(serial)
+    revoked.set_serial(hex_serial)
     crl.add_revoked(revoked)
 
     connection.shutdown()
