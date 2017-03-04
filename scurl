@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 '''
 CS 255, Winter 2017
-Project 2: scurl
+Project 2: scurl - Secure curl
 
 Group:
     Jon Deaton, jdeaton@stanford.edu
@@ -23,7 +23,7 @@ class SecureCurl(object):
                  certificate=None, allow_stale_certs=False):
 
         self.default_port = 443 # Default port for HTTPS requests
-        self.packet_end = "\r\n0\r\n\r\n" # Something specifying the end of the packet
+        self.packet_end = b'\r\n\r\n' # End of buffer
         self.timeout = 1 # socket.rev() timeout in seconds
         self.buffer_size = 1024 # Buffer size for packet recieving in bytes
 
@@ -62,7 +62,7 @@ class SecureCurl(object):
                 f = open(self.crlfile, 'r')
                 crl_buff = f.read()
             except:
-                sys.stderr.write("Error reading CRL file: %s" % self.crlfile)
+                sys.stderr.write("Error reading CRL file: %s\n" % self.crlfile)
                 exit(1)
 
             crl = OpenSSL.crypto.load_crl(OpenSSL.crypto.FILETYPE_PEM, crl_buff)
@@ -71,7 +71,7 @@ class SecureCurl(object):
     def verify(self, conn, cert, errnum, depth, ok):
         # Verify the certificate in the given context
 
-        print 'Got certificate: %s' % cert.get_subject()
+        print 'Verifying certificate: %s' % cert.get_subject()
 
         # Check to see if it's on the CRL
         if self.revocations is not None:
@@ -94,7 +94,7 @@ class SecureCurl(object):
             try:
                 connection.connect((url, self.default_port))
             except:
-                sys.stderr.write("Could not establish connection.")
+                sys.stderr.write("Could not establish connection.\n")
                 exit(1)
 
             # Do the connection (secret) handshake
