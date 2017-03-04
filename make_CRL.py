@@ -26,16 +26,22 @@ for url in urls:
     connection.do_handshake()
 
     certificate = connection.get_peer_certificate()
+
     serial = certificate.get_serial_number()
     hex_serial = hex(serial)
     print "%s Serial: %s" % (url, hex_serial)
 
     revoked = OpenSSL.crypto.Revoked()
     revoked.set_serial(hex_serial)
+
     crl.add_revoked(revoked)
 
     connection.shutdown()
     connection.close()
 
+
+# Just kidding this only works in pyOpenSSL 16.0.0
 crl_dump = OpenSSL.crypto.dump_crl(OpenSSL.crypto.FILETYPE_PEM, crl)
+#crl_dump =
+
 open(crlfile, 'w').write(crl_dump)
