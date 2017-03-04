@@ -1,5 +1,5 @@
 # CS 255: Proejct 2 – Secure CURL
-### Winter 2017
+This is the second project in CS 255, "Introduction to Cryptography" taught by Dan Bonneh at Stanford University. In this project we implement a secure version of the curl command line utility which is used for fetching HTTP content from a URL. This project is implemented in PYthon 2.7 and makes use of the pyOpenSSL library. 
 
 ## Authors
 Jon Deaton: jdeaton@stanford.edu
