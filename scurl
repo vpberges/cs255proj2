@@ -56,16 +56,19 @@ class SecureCurl(object):
         return context
 
     def set_CRL(self):
-        # Set the Certificate Revocation List if provided
+        # Set the Certificate Revocation List if one was provided by the --crlfile argument
         if self.crlfile is not None:
             try:
                 f = open(self.crlfile, 'r')
                 crl_buff = f.read()
+                f.close()
             except:
                 sys.stderr.write("Error reading CRL file: %s\n" % self.crlfile)
-                exit(1)
+                raise
 
+            # Load the buffer into an OpenSSL CRL object
             crl = OpenSSL.crypto.load_crl(OpenSSL.crypto.FILETYPE_PEM, crl_buff)
+            # Create a lookup table for revocations. These are formatted as capital hex strings
             self.revocations = set(map(lambda x: x.get_serial(), crl.get_revoked()))
 
     def verify(self, conn, cert, errnum, depth, ok):
@@ -77,14 +80,15 @@ class SecureCurl(object):
         # 1) url is the same as the one that we requested
         # 2) the chain of certificates
 
-        # Check to see if it's on the CRL
+        # Check to see if it's on the CRL if we were provided a CRL file
         if self.revocations is not None:
-            serial_number = cert.get_serial_number()
-            print serial_number
-            exit()
+            # Serial Numbers are encoded in capital hex in the PEM files so
+            # we must format the certificate number as such to look it up
+            serial_number = "%X" % cert.get_serial_number()
+            print "Serial number from certificate: %s" % serial_number
             if serial_number in self.revocations:
-                print "Revoked certificate"
-                return errnum
+                sys.stderr.write("Revoked certificate: %s\n" % serial_number)
+                raise
 
         return ok
 
@@ -102,9 +106,10 @@ class SecureCurl(object):
                 connection.connect((url, self.default_port))
             except:
                 sys.stderr.write("Could not establish connection.\n")
-                exit(1)
+                raise
 
             # Do the connection (secret) handshake
+            # This is where verification of connection certificate will be called
             connection.do_handshake()
 
             # Make a HTTP request
@@ -118,6 +123,8 @@ class SecureCurl(object):
                     sys.stdout.write(packet)
                     sys.stdout.flush()
 
+                    # I still can't figure out how make the connection timeout if
+                    # the stream ends without the packet end demarkation
                     if packet.endswith(self.packet_end):
                          break
 
@@ -196,7 +203,7 @@ def main():
 
     parser.add_argument("--allow-stale-certs", type=int, dest="allow_stale_certs", help="Accept a certificate C as valid if (a) C is an otherwise valid certificate that has expired and (b) C expired within the past N days.")
 
-    parser.add_argument("--pinnedcertificate", help="Provide a public-key certificate file in PEM format. When a user passes this argument, the TLSl client will only send an application data to server if the server's TLS certificate is exactly the one contained in the specified file.")
+    parser.add_argument("--pinnedcertificate", help="Provide a public-key certificate file in PEM format. When a user passes this argument, the TLSl client will only send an application data to server if the server's TLS certificate is exactly the one contained in the specified file. This option will overrride everything else.")
 
     args = parser.parse_args()
 
