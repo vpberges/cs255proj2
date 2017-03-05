@@ -46,9 +46,6 @@ class SecureCurl(object):
         if self.ciphers is not None:
             context.set_cipher_list(self.ciphers)
 
-        # Somehow this line doesn't have any effect
-        context.set_timeout(self.timeout)
-
         # Set the Pem file if necessary
         if self.pinnedcertificate is not None:
             context.use_privatekey_file(self.pinnedcertificate)
@@ -101,16 +98,17 @@ class SecureCurl(object):
         for url in urls:
             # Make a connection using the specified url
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            #sock.settimeout(self.timeout)
             connection = OpenSSL.SSL.Connection(self.context, sock)
 
-            print "timeout is: %d" % self.context.get_timeout()
-
+            # Try to connect to the host
             try:
                 connection.connect((url, self.default_port))
+            except socket.gaierror:
+                sys.stderr.write("scurl: (6) Could not resolve host: %s\n" % url)
+                exit(1)
             except:
-                sys.stderr.write("Could not establish connection.\n")
-                raise
+                sys.stderr.write("Coult not establish connection with: %s\n" % url)
+                exit(1)
 
             # Do the connection (secret) handshake
             # This is where verification of connection certificate will be called
@@ -124,27 +122,33 @@ class SecureCurl(object):
             request = format_http_request(url)
             connection.send(request)
 
-            # Listen to the socket
-            try:
-                while True:
+            # Now that the handshake and request have been completed
+            #  Receive chunks of data from the socket
+            while True:
+                try:
                     packet = connection.recv(self.buffer_size)
+                except OpenSSL.SSL.ZeroReturnError:
+                    # End of content
+                    break
+                except OpenSSL.SSL.WantReadError:
+                    # Something happened
+                    break
+                except OpenSSL.SSL.Error:
+                    sys.stderr.write("Connection died unexpectedly.\n")
+                    break
+
+                # Make sure not to print out the packet end mark
+                if packet.endswith(self.packet_end):
+                    print "index: %d" % packet.index(self.packet_end)
+                    sys.stdout.write(packet[:packet.index(self.packet_end)])
+                else:
                     sys.stdout.write(packet)
-                    sys.stdout.flush()
+                sys.stdout.flush()
 
-                    # I still can't figure out how make the connection timeout if
-                    # the stream ends without the packet end demarkation
-                    if packet.endswith(self.packet_end) or len(packet) == 0:
-                         break
+                # Check for end of content
+                if packet.endswith(self.packet_end) or len(packet) == 0:
+                    break
 
-            except OpenSSL.SSL.ZeroReturnError:
-                # End of content
-                continue
-            except OpenSSL.SSL.WantReadError:
-                continue
-            except OpenSSL.SSL.Error:
-                sys.stderr.write("Connection died unexpectedly.\n")
-                continue
-                
             connection.shutdown()
             connection.close()
 
