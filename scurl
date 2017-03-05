@@ -12,7 +12,7 @@ import os
 import sys
 import OpenSSL
 import socket
-from urlparse import urlparse
+import urlparse
 import argparse
 import datetime
 
@@ -35,7 +35,7 @@ class SecureCurl(object):
         self.pinnedcertificate = pinnedcertificate
         self.allow_stale_certs = allow_stale_certs
 
-        # The verificatoin mode used for Context.set_verify(mode, calback)
+        # The verification mode used for Context.set_verify(mode, calback)
         # IDK what this is really i just got this from somewhere online
         # self.verify_mode = OpenSSL.SSL.VERIFY_PEER |\
         #                    OpenSSL.SSL.VERIFY_FAIL_IF_NO_PEER_CERT | \
@@ -100,10 +100,12 @@ class SecureCurl(object):
     def verify(self, conn, cert, errnum, depth, ok):
         # Verify the certificate in the given context
 
-        print 'Verifying certificate: %s' % cert.get_subject()
-        print "Verifying ok? %s" % ok
-
-        # Still need to check the url is the same as the one that we requested
+        # Still need to check the hostname is the same as the one that we requested
+        # remove the "False and" when you figure out how to get this comparison to work correctly
+        if False and conn.get_servername() != cert.get_subject().commonName:
+            # Host-names did not match
+            sys.stderr.write("Certificate verification failed: Host-name mismatch.\n")
+            return False
 
         # If we want to allow stale certificates check the expiration date on the certificate
         if self.allow_stale_certs is not None:
@@ -111,10 +113,12 @@ class SecureCurl(object):
             expired_ago = datetime.datetime.now() - expire_date
             print "Expired %d days ago" % expired_ago.days
             if expired_ago.days > self.allow_stale_certs:
+                sys.stderr.write("Certificate verification failed: Expired more then %d days ago.\n" % self.allow_stale_certs)
                 return False
 
         elif cert.has_expired():
             # Allow stale certificated was not specify so simply check to see if it's expired or not
+            sys.stderr.write("Certificate verification failed: Expired certificate.\n")
             return False
 
         # Dealing with a pinned certificate
@@ -130,11 +134,12 @@ class SecureCurl(object):
 
             # Check to make sure that the certificates match exactly by checking the SHA 256 hash
             pinned_cert = OpenSSL.crypto.load_certificate(pinned_cert_buff)
-            pinned_cert_digest = pinned_cert.digest("sha256")
-            server_cert_digest = cert.digest("sha256")
+            pinned_cert_digest = pinned_cert.digest(b"sha256")
+            server_cert_digest = cert.digest(b"sha256")
 
             if pinned_cert_digest != server_cert_digest:
-                # SHA-256 hash did not match
+                # SHA-256 hashes did not match
+                sys.stderr.write("Certificate verification failed: Mismatched sha 256.\n")
                 return False
 
         # Check to see if it's on the CRL if we were provided a CRL file
@@ -144,47 +149,65 @@ class SecureCurl(object):
             # I haven't been able to test this yet
             serial_number = "%X" % cert.get_serial_number()
             if serial_number in self.revocations or True:
+                sys.stderr.write("Certificate verification failed: Serial number in CRL.\n")
                 return False
 
         return True
 
+    def setup_connection(self, host, port):
+        # This method is for creating a OpenSSL Connection instance with verification already performed
+        # so that the connection is ready to make HTTP requests
+
+        # Make a connection using the specified url
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        connection = OpenSSL.SSL.Connection(self.context, sock)
+
+        # This specified the hostname to send as server name in client hello message for SNI implementation
+        connection.set_tlsext_host_name(host)
+
+        # Try to connect to the host
+        try:
+            connection.connect((host, port))
+        except socket.gaierror:
+            sys.stderr.write("scurl: (6) Could not resolve host: %s\n" % host)
+            exit(1)
+        except:
+            sys.stderr.write("Coult not establish connection with: %s:d\n" % (host, port))
+            exit(1)
+
+        # Do the connection (secret) handshake
+        # This is where verification of connection certificate will be called
+        try:
+            connection.do_handshake()
+        except OpenSSL.SSL.WantReadError:
+            sys.stderr.write("Encountered WantReadError in handshake.\n")
+            exit(1)
+        except OpenSSL.SSL.Error:
+            # Certificate verification failed
+            sys.stderr.flush()
+            exit(1)
+
+        return connection
+
     def curl_urls(self, urls):
 
-        # Get the context
+        # Create the Context instance
         self.context = self.make_context()
 
         for url in urls:
-            # Make a connection using the specified url
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            connection = OpenSSL.SSL.Connection(self.context, sock)
+            # Parse hostname and port from the url
+            host, port = get_host_port(url)
+            port = port if port is not None else self.default_port
 
-            # Try to connect to the host
-            try:
-                connection.connect((url, self.default_port))
-            except socket.gaierror:
-                sys.stderr.write("scurl: (6) Could not resolve host: %s\n" % url)
-                exit(1)
-            except:
-                sys.stderr.write("Coult not establish connection with: %s\n" % url)
-                exit(1)
-
-            # Do the connection (secret) handshake
-            # This is where verification of connection certificate will be called
-            try:
-                connection.do_handshake()
-            except OpenSSL.SSL.WantReadError:
-                sys.stderr.write("Encountered WantReadError in handshake.\n")
-                exit(1)
-            except OpenSSL.SSL.Error:
-                sys.stderr.write("Certificate verification failed.\n")
-                exit(1)
+            # Make connection and do handshake
+            connection = self.setup_connection(host, port)
 
             # Make a HTTP request
-            request = format_http_request(url)
+            request = format_http_request(host)
             connection.send(request)
 
             # Now that the handshake and request have been completed
-            #  Receive chunks of data from the socket
+            # Receive chunks of data from the socket
             while True:
                 try:
                     packet = connection.recv(self.buffer_size)
@@ -228,6 +251,20 @@ def get_SSL_method(args):
     else:
         # Default to TLS 1.2
         return OpenSSL.SSL.TLSv1_2_METHOD
+
+def get_host_port(url):
+    # This function parses the host and port from a provided url
+    # Return: a tuple of host, port where port is None if no port was provided
+    parsed = urlparse.urlparse(url)
+    host_port = parsed.netloc if parsed.netloc != '' else parsed.path
+
+    if ":" in host_port:
+        host, port = host_port.split(":")
+        port = int(port)
+    else:
+        host, port = host_port, None
+
+    return host, port
 
 def format_http_request(url):
     # This is how to format an HTTP request
@@ -286,7 +323,7 @@ def main():
     args = parser.parse_args()
 
     # Make sure that a non-negative integer was passed to this argument
-    if args.allow_stale_certs < 0:
+    if args.allow_stale_certs is not None and args.allow_stale_certs < 0:
         parser.error("--allow-stale-certs must be non-negative integer.")
 
     # Pass off arguments to be curl'd
