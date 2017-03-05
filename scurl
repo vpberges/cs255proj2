@@ -14,13 +14,13 @@ import OpenSSL
 import socket
 from urlparse import urlparse
 import argparse
-
+import datetime
 
 class SecureCurl(object):
     # This class implements the functionality of curl but with TLS
 
     def __init__(self, method, ciphers=None, crlfile=None, pinnedcertificate=None,
-                 certificate=None, allow_stale_certs=False):
+                 cacert=None, allow_stale_certs=False):
 
         self.default_port = 443 # Default port for HTTPS requests
         self.packet_end = b'\r\n\r\n' # End of buffer
@@ -31,10 +31,20 @@ class SecureCurl(object):
         self.ciphers = ciphers
         self.method = method
         self.crlfile = crlfile
-        self.certificate = certificate
+        self.cacert = cacert
         self.pinnedcertificate = pinnedcertificate
         self.allow_stale_certs = allow_stale_certs
 
+        # The verificatoin mode used for Context.set_verify(mode, calback)
+        # IDK what this is really i just got this from somewhere online
+        # self.verify_mode = OpenSSL.SSL.VERIFY_PEER |\
+        #                    OpenSSL.SSL.VERIFY_FAIL_IF_NO_PEER_CERT | \
+        #                    OpenSSL.SSL.VERIFY_CLIENT_ONCE
+
+        self.verify_mode = OpenSSL.SSL.VERIFY_NONE
+        self.verify_mode = OpenSSL.SSL.VERIFY_PEER
+
+        # This will contain a lookup table of hexidecmial encoded certificate cerial numbers
         self.revocations = None
         self.set_CRL()
 
@@ -46,11 +56,28 @@ class SecureCurl(object):
         if self.ciphers is not None:
             context.set_cipher_list(self.ciphers)
 
-        # Set the Pem file if necessary
-        if self.pinnedcertificate is not None:
-            context.use_privatekey_file(self.pinnedcertificate)
+        # Specify the CA Certificate to use for verification
+        if self.cacert is not None:
+            try:
+                f = open(self.cacert, 'r')
+                crt_buff = f.read()
+                f.close()
+            except:
+                sys.stderr.write("Error reading CA certificate file: %s\n" % self.cacert)
+                exit(1)
 
-        context.set_verify(OpenSSL.SSL.VERIFY_NONE, self.verify)
+            # Use the certificate provided
+            try:
+                ca_crt = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, crt_buff)
+            except:
+                sys.stderr.write("Error loading CA certificate from: %s\n" % self.cacert)
+                exit(1)
+
+            context.use_certificate(ca_crt)
+
+        # Set the verify callback
+        context.set_verify(self.verify_mode, self.verify)
+
         return context
 
     def set_CRL(self):
@@ -73,22 +100,58 @@ class SecureCurl(object):
         # Verify the certificate in the given context
 
         print 'Verifying certificate: %s' % cert.get_subject()
+        print "Verifying ok? %s" % ok
 
         # Need to check the following:
         # 1) url is the same as the one that we requested
         # 2) the chain of certificates
 
+        # If we want to allow stale certifiicates check the expiration date on the certificate
+        if self.allow_stale_certs is not None:
+            if 'notAfter' in cert:
+                try:
+                    expire_date = datetime.datetime.strptime(cert['notAfter'], "%b %d %H:%M:%S %Y %Z")
+                except:
+                    sys.stderr.write('Certificate date format unknow.\n')
+                    exit(1)
+                expired_ago = datetime.datetime.now() - expire_date
+                if expired_ago.days <= self.allow_stale_certs:
+                    return True
+                else:
+                    return False
+            else:
+                sys.stderr.write("Could not find certificate expiration date.\n")
+                exit(1)
+
+        elif cert.has_expired():
+            # Allow stale certificated was not specify so simply check to see if it's expired or not
+            return False
+
+        # Dealing with the pinned certificate
+        if self.pinnedcertificate is not None:
+
+            try:
+                f = open(self.pinnedcertificate, 'r')
+                pinned_cert_buff = f.read()
+                f.close()
+            except:
+                sys.stderr.write("Error reading pinned certificate file: %s\n" % self.pinnedcertificate)
+                exit(1)
+
+            server_cert_buff = OpenSSL.crypto.dump_certificate(cert)
+            if pinned_cert_buff != server_cert_buff:
+                return False
+
         # Check to see if it's on the CRL if we were provided a CRL file
         if self.revocations is not None:
             # Serial Numbers are encoded in capital hex in the PEM files so
             # we must format the certificate number as such to look it up
+            # I haven't been able to test this yet
             serial_number = "%X" % cert.get_serial_number()
-            print "Serial number from certificate: %s" % serial_number
-            if serial_number in self.revocations:
-                sys.stderr.write("Revoked certificate: %s\n" % serial_number)
-                raise
+            if serial_number in self.revocations or True:
+                return False
 
-        return ok
+        return True
 
     def curl_urls(self, urls):
 
@@ -116,7 +179,10 @@ class SecureCurl(object):
                 connection.do_handshake()
             except OpenSSL.SSL.WantReadError:
                 sys.stderr.write("Encountered WantReadError in handshake.\n")
-                raise
+                exit(1)
+            except OpenSSL.SSL.Error:
+                sys.stderr.write("Certificate verification failed.\n")
+                exit(1)
 
             # Make a HTTP request
             request = format_http_request(url)
@@ -186,7 +252,7 @@ def scurl(args):
                                ciphers=args.ciphers,
                                crlfile=args.crlfile,
                                pinnedcertificate=args.pinnedcertificate,
-                               certificate=args.cacert,
+                               cacert=args.cacert,
                                allow_stale_certs=args.allow_stale_certs)
 
     # curl all the URLS
