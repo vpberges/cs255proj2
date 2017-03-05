@@ -21,13 +21,7 @@ for example
 
 
 ## Project TODO list
-1. Confirm hostname from returned certificate
-2. Implement SNI
-    a. Send hostname during TLS client Hello message at connection setup
-    b. Also check to make sure that the hostname matches during verify
-    c. Help here: http://stackoverflow.com/questions/5113333/how-to-implement-server-name-indication-sni
-3. Parse malformed URLs i.e. https://www.example.com/
-4. Allow user to specify port number
-5. Figure out how to get it to stop reading/timeout when no message ending is sent
-6. Make --cacert override --crlfile
-7. Test everything extensively
+1. Verify Hostname matches in certificate verification
+2. Stop listening/timeout when no content end it sent
+3. Make --cacert override --crlfile
+4. Test everything extensively
