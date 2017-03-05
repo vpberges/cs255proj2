@@ -46,6 +46,7 @@ class SecureCurl(object):
         if self.ciphers is not None:
             context.set_cipher_list(self.ciphers)
 
+        # Somehow this line doesn't have any effect
         context.set_timeout(self.timeout)
 
         # Set the Pem file if necessary
@@ -100,7 +101,10 @@ class SecureCurl(object):
         for url in urls:
             # Make a connection using the specified url
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            #sock.settimeout(self.timeout)
             connection = OpenSSL.SSL.Connection(self.context, sock)
+
+            print "timeout is: %d" % self.context.get_timeout()
 
             try:
                 connection.connect((url, self.default_port))
@@ -110,7 +114,11 @@ class SecureCurl(object):
 
             # Do the connection (secret) handshake
             # This is where verification of connection certificate will be called
-            connection.do_handshake()
+            try:
+                connection.do_handshake()
+            except OpenSSL.SSL.WantReadError:
+                sys.stderr.write("Encountered WantReadError in handshake.\n")
+                raise
 
             # Make a HTTP request
             request = format_http_request(url)
@@ -125,13 +133,18 @@ class SecureCurl(object):
 
                     # I still can't figure out how make the connection timeout if
                     # the stream ends without the packet end demarkation
-                    if packet.endswith(self.packet_end):
+                    if packet.endswith(self.packet_end) or len(packet) == 0:
                          break
 
+            except OpenSSL.SSL.ZeroReturnError:
+                # End of content
+                continue
+            except OpenSSL.SSL.WantReadError:
+                continue
             except OpenSSL.SSL.Error:
                 sys.stderr.write("Connection died unexpectedly.\n")
                 continue
-
+                
             connection.shutdown()
             connection.close()
 
@@ -154,9 +167,9 @@ def get_SSL_method(args):
 def format_http_request(url):
     # This is how to format an HTTP request
     request = "GET / HTTP/1.1\r\n" \
-                  "Host: %s\r\n"\
-                  "User-Agent: curl/7.52.1\n\r" \
-                  "Accept: */*\r\n\r\n" % url
+              "Host: %s\r\n" \
+              "User-Agent: curl/7.52.1\r\n" \
+              "Accept: */*\r\n\r\n" % url
     return request
 
 def scurl(args):
