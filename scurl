@@ -102,32 +102,21 @@ class SecureCurl(object):
         print 'Verifying certificate: %s' % cert.get_subject()
         print "Verifying ok? %s" % ok
 
-        # Need to check the following:
-        # 1) url is the same as the one that we requested
-        # 2) the chain of certificates
+        # Still need to check the url is the same as the one that we requested
 
-        # If we want to allow stale certifiicates check the expiration date on the certificate
+        # If we want to allow stale certificates check the expiration date on the certificate
         if self.allow_stale_certs is not None:
-            if 'notAfter' in cert:
-                try:
-                    expire_date = datetime.datetime.strptime(cert['notAfter'], "%b %d %H:%M:%S %Y %Z")
-                except:
-                    sys.stderr.write('Certificate date format unknow.\n')
-                    exit(1)
-                expired_ago = datetime.datetime.now() - expire_date
-                if expired_ago.days <= self.allow_stale_certs:
-                    return True
-                else:
-                    return False
-            else:
-                sys.stderr.write("Could not find certificate expiration date.\n")
-                exit(1)
+            expire_date = datetime.datetime.strptime(cert.get_notAfter(), "%Y%m%d%H%M%SZ")
+            expired_ago = datetime.datetime.now() - expire_date
+            print "Expired %d days ago" % expired_ago.days
+            if expired_ago.days > self.allow_stale_certs:
+                return False
 
         elif cert.has_expired():
             # Allow stale certificated was not specify so simply check to see if it's expired or not
             return False
 
-        # Dealing with the pinned certificate
+        # Dealing with a pinned certificate
         if self.pinnedcertificate is not None:
 
             try:
