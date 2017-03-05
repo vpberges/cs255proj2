@@ -73,6 +73,7 @@ class SecureCurl(object):
                 sys.stderr.write("Error loading CA certificate from: %s\n" % self.cacert)
                 exit(1)
 
+            # CA Certificate was loaded properly so specify that it should be used
             context.use_certificate(ca_crt)
 
         # Set the verify callback
@@ -127,8 +128,13 @@ class SecureCurl(object):
                 sys.stderr.write("Error reading pinned certificate file: %s\n" % self.pinnedcertificate)
                 exit(1)
 
-            server_cert_buff = OpenSSL.crypto.dump_certificate(cert)
-            if pinned_cert_buff != server_cert_buff:
+            # Check to make sure that the certificates match exactly by checking the SHA 256 hash
+            pinned_cert = OpenSSL.crypto.load_certificate(pinned_cert_buff)
+            pinned_cert_digest = pinned_cert.digest("sha256")
+            server_cert_digest = cert.digest("sha256")
+
+            if pinned_cert_digest != server_cert_digest:
+                # SHA-256 hash did not match
                 return False
 
         # Check to see if it's on the CRL if we were provided a CRL file
@@ -278,6 +284,10 @@ def main():
     parser.add_argument("--pinnedcertificate", help="Provide a public-key certificate file in PEM format. When a user passes this argument, the TLSl client will only send an application data to server if the server's TLS certificate is exactly the one contained in the specified file. This option will overrride everything else.")
 
     args = parser.parse_args()
+
+    # Make sure that a non-negative integer was passed to this argument
+    if args.allow_stale_certs < 0:
+        parser.error("--allow-stale-certs must be non-negative integer.")
 
     # Pass off arguments to be curl'd
     scurl(args)
