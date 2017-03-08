@@ -102,6 +102,7 @@ class SecureCurl(object):
             self.revocations = set(map(lambda x: x.get_serial(), crl.get_revoked()))
 
     def hostname_match(self, hostname, pattern):
+        # Check to make sure that the host-names match
         if "*" in pattern:
             # rxString = r'(?:^|\s)(\w+\.)?' + pattern.replace('.', '\.')[3:] + '(?:$|\s)'
             # regex = re.compile(rxString)
