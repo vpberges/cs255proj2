@@ -15,6 +15,7 @@ import socket
 import urlparse
 import argparse
 import datetime
+import fnmatch
 
 class SecureCurl(object):
     # This class implements the functionality of curl but with TLS
@@ -51,6 +52,9 @@ class SecureCurl(object):
     def make_context(self):
         # Initialize the context
         context = OpenSSL.SSL.Context(self.method)
+
+        # For SNI hostname verification
+        context.check_hostname = True
 
         # Set the ciphers if necessary
         if self.ciphers is not None:
@@ -100,18 +104,20 @@ class SecureCurl(object):
     def verify(self, conn, cert, errnum, depth, ok):
         # Verify the certificate in the given context
 
-        # Still need to check the hostname is the same as the one that we requested
-        # remove the "False and" when you figure out how to get this comparison to work correctly
-        if False and conn.get_servername() != cert.get_subject().commonName:
-            # Host-names did not match
-            sys.stderr.write("Certificate verification failed: Host-name mismatch.\n")
+        # print "depth: %d" % depth
+        # print "Server name: %s" % conn.get_servername()
+        # print "Certificate %s" % cert
+        # print "subject: %s" % cert.get_subject().commonName
+
+        # Verify hostname match
+        if depth == 0 and conn. get_servername() != cert.get_subject().commonName:
+            sys.stderr.write("Certificate verification failed: Hostname did not match\n")
             return False
 
         # If we want to allow stale certificates check the expiration date on the certificate
         if self.allow_stale_certs is not None:
             expire_date = datetime.datetime.strptime(cert.get_notAfter(), "%Y%m%d%H%M%SZ")
             expired_ago = datetime.datetime.now() - expire_date
-            print "Expired %d days ago" % expired_ago.days
             if expired_ago.days > self.allow_stale_certs:
                 sys.stderr.write("Certificate verification failed: Expired more then %d days ago.\n" % self.allow_stale_certs)
                 return False
@@ -139,7 +145,7 @@ class SecureCurl(object):
 
             if pinned_cert_digest != server_cert_digest:
                 # SHA-256 hashes did not match
-                sys.stderr.write("Certificate verification failed: Mismatched sha 256.\n")
+                sys.stderr.write("Certificate verification failed: Mismatched SHA 256.\n")
                 return False
 
         # Check to see if it's on the CRL if we were provided a CRL file
@@ -148,7 +154,7 @@ class SecureCurl(object):
             # we must format the certificate number as such to look it up
             # I haven't been able to test this yet
             serial_number = "%X" % cert.get_serial_number()
-            if serial_number in self.revocations or True:
+            if serial_number in self.revocations:
                 sys.stderr.write("Certificate verification failed: Serial number in CRL.\n")
                 return False
 
@@ -223,7 +229,6 @@ class SecureCurl(object):
 
                 # Make sure not to print out the packet end mark
                 if packet.endswith(self.packet_end):
-                    print "index: %d" % packet.index(self.packet_end)
                     sys.stdout.write(packet[:packet.index(self.packet_end)])
                 else:
                     sys.stdout.write(packet)
