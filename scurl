@@ -111,7 +111,6 @@ class SecureCurl(object):
         else:
             return hostname == pattern
 
-
     def verify(self, conn, cert, errnum, depth, ok):
         # Verify the certificate in the given context
 
@@ -123,6 +122,8 @@ class SecureCurl(object):
         # Verify hostname match
         hostname = conn.get_servername()
         pattern = cert.get_subject().commonName
+
+
         if depth == 0 and not self.hostname_match(hostname, pattern):
             sys.stderr.write("Certificate verification failed: Hostname did not match\n")
             return False
@@ -236,6 +237,9 @@ class SecureCurl(object):
                 except OpenSSL.SSL.WantReadError:
                     # Something happened
                     break
+                except OpenSSL.SSL.SysCallError:
+                    # End of file
+                    break
                 except OpenSSL.SSL.Error:
                     sys.stderr.write("Connection died unexpectedly.\n")
                     break
@@ -286,10 +290,11 @@ def get_host_port(url):
 
 def format_http_request(url):
     # This is how to format an HTTP request
-    request = "GET / HTTP/1.1\r\n" \
+    request = "GET / HTTP/1.0\r\n" \
               "Host: %s\r\n" \
-              "User-Agent: curl/7.52.1\r\n" \
-              "Accept: */*\r\n\r\n" % url
+              "User-Agent: curl/7.52.1\r\n"\
+              "Accept: */*\r\n\r\n" \
+              "Connection: keep-alive" % url
     return request
 
 def scurl(args):
