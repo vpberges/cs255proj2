@@ -15,7 +15,7 @@ import socket
 import urlparse
 import argparse
 import datetime
-import fnmatch
+import re
 
 class SecureCurl(object):
     # This class implements the functionality of curl but with TLS
@@ -101,6 +101,15 @@ class SecureCurl(object):
             # Create a lookup table for revocations. These are formatted as capital hex strings
             self.revocations = set(map(lambda x: x.get_serial(), crl.get_revoked()))
 
+    def hostname_match(self, hostname, pattern):
+        if "*" in pattern:
+            rxString = r'(?:^|\s)(\w+\.)?' + pattern.replace('.', '\.')[3:] + '(?:$|\s)'
+            regex = re.compile(rxString)
+            return regex.match(hostname)
+        else:
+            return hostname == pattern
+
+
     def verify(self, conn, cert, errnum, depth, ok):
         # Verify the certificate in the given context
 
@@ -110,7 +119,9 @@ class SecureCurl(object):
         print "subject: %s" % cert.get_subject().commonName
 
         # Verify hostname match
-        if depth == 0 and conn. get_servername() != cert.get_subject().commonName:
+        hostname = conn.get_servername()
+        pattern = cert.get_subject().commonName
+        if depth == 0 and not self.hostname_match(hostname, pattern):
             sys.stderr.write("Certificate verification failed: Hostname did not match\n")
             return False
 
