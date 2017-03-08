@@ -104,10 +104,10 @@ class SecureCurl(object):
     def verify(self, conn, cert, errnum, depth, ok):
         # Verify the certificate in the given context
 
-        # print "depth: %d" % depth
-        # print "Server name: %s" % conn.get_servername()
-        # print "Certificate %s" % cert
-        # print "subject: %s" % cert.get_subject().commonName
+        print "depth: %d" % depth
+        print "Server name: %s" % conn.get_servername()
+        print "Certificate %s" % cert
+        print "subject: %s" % cert.get_subject().commonName
 
         # Verify hostname match
         if depth == 0 and conn. get_servername() != cert.get_subject().commonName:
