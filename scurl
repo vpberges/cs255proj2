@@ -103,9 +103,14 @@ class SecureCurl(object):
 
     def hostname_match(self, hostname, pattern):
         if "*" in pattern:
-            rxString = r'(?:^|\s)(\w+\.)?' + pattern.replace('.', '\.')[3:] + '(?:$|\s)'
-            regex = re.compile(rxString)
-            return regex.match(hostname)
+            # rxString = r'(?:^|\s)(\w+\.)?' + pattern.replace('.', '\.')[3:] + '(?:$|\s)'
+            # regex = re.compile(rxString)
+            # return regex.match(hostname)
+            h = hostname.replace(pattern.replace('*',''),'')
+            if '.' in h:
+                return False
+            else:
+                return True
         else:
             return hostname == pattern
 
@@ -113,10 +118,10 @@ class SecureCurl(object):
     def verify(self, conn, cert, errnum, depth, ok):
         # Verify the certificate in the given context
 
-        print "depth: %d" % depth
-        print "Server name: %s" % conn.get_servername()
-        print "Certificate %s" % cert
-        print "subject: %s" % cert.get_subject().commonName
+        # print "depth: %d" % depth
+        # print "Server name: %s" % conn.get_servername()
+        # print "Certificate %s" % cert
+        # print "subject: %s" % cert.get_subject().commonName
 
         # Verify hostname match
         hostname = conn.get_servername()
