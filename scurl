@@ -416,7 +416,20 @@ def main():
 
     parser.add_argument("--pinnedcertificate", help="Provide a public-key certificate file in PEM format. When a user passes this argument, the TLSl client will only send an application data to server if the server's TLS certificate is exactly the one contained in the specified file. This option will overrride everything else.")
 
+    # args, leftovers = parser.parse_known_args()
+    # print args
+    # print leftovers
+    def in_case_of_parse_error(shit):
+        sys.stderr.write("Your query in invalid, use --help for assistance.\n")
+        exit(1)
+    parser.error = in_case_of_parse_error
     args = parser.parse_args()
+    # try:
+    #     args = parser.parse_args()
+    # except argparse.ArgumentError, exc:
+    #     sys.stderr.write("Your query in invalid, use --help for assistance.\n")
+    #     exit(1)
+
 
     # Make sure that a non-negative integer was passed to this argument
     if args.allow_stale_certs is not None and args.allow_stale_certs < 0:
