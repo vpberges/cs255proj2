@@ -357,7 +357,7 @@ def format_http_request(url):
     # This is how to format an HTTP request
     request = "GET / HTTP/1.0\r\n" \
               "Host: %s\r\n" \
-              "User-Agent: curl/7.52.1\r\n"\
+              "User-Agent: curl/7.35.0\r\n"\
               "Accept: */*\r\n\r\n" \
               "Connection: keep-alive\r\n\r\n" % url
     return request
