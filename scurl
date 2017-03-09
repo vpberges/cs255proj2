@@ -135,8 +135,14 @@ class SecureCurl(object):
         if depth == 0:
             hostname = conn.get_servername()
             pattern = cert.get_subject().commonName
-            SAN = []
+            SAN = [pattern]
+            authorityKeyIdentifier = ''
+            subjectKeyIdentifier = ''
             for i in range(cert.get_extension_count()):
+                if cert.get_extension(i).get_short_name() == 'authorityKeyIdentifier':
+                    authorityKeyIdentifier = cert.get_extension(i).get_data()
+                if cert.get_extension(i).get_short_name() == 'subjectKeyIdentifier':
+                    subjectKeyIdentifier = cert.get_extension(i).get_data()
                 if cert.get_extension(i).get_short_name() == 'subjectAltName':
                     # print cert.get_extension(i).get_data(), '----'
                     # print cert.get_extension(i).get_data().split('0')
@@ -144,13 +150,15 @@ class SecureCurl(object):
                     SAN= ''.join(i  if ord(i) < 128 else '||||' for i in cert.get_extension(i).get_data())
                     SAN = SAN.split('||||')
                     SAN = [str(x[1:]) for x in SAN[1:]]
-            SAN += [pattern]
+            if authorityKeyIdentifier == subjectKeyIdentifier:
+                self.error = 'There is a self signed certificate'
+                return False
             if not any([self.hostname_match(hostname, i) for i in SAN]):
                 #sys.stderr.write("Certificate verification failed: Hostname did not match\n")
                 self.error = "Certificate verification failed: Hostname did not match"
                 return False
 
-        # if depth == 0 and not any([self.hostname_match(hostname, pattern) for patern in SAN]):
+        # if depth == 0 and not any([self.hostname_match(hostname, pattern) for pattern in SAN]):
         #     sys.stderr.write("Certificate verification failed: Hostname did not match\n")
         #     return False
 
