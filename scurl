@@ -81,7 +81,10 @@ class SecureCurl(object):
             context.use_certificate(ca_crt)
 
         # Set the verify callback
-        context.set_verify(self.verify_mode, self.verify)
+        try:
+            context.set_verify(self.verify_mode, self.verify)
+        except:
+            exit(1)
 
         return context
 
@@ -94,7 +97,7 @@ class SecureCurl(object):
                 f.close()
             except:
                 sys.stderr.write("Error reading CRL file: %s\n" % self.crlfile)
-                raise
+                exit(1)
 
             # Load the buffer into an OpenSSL CRL object
             crl = OpenSSL.crypto.load_crl(OpenSSL.crypto.FILETYPE_PEM, crl_buff)
@@ -103,10 +106,14 @@ class SecureCurl(object):
 
     def hostname_match(self, hostname, pattern):
         # Check to make sure that the host-names match
+        # print hostname, pattern
+
         if "*" in pattern:
             # rxString = r'(?:^|\s)(\w+\.)?' + pattern.replace('.', '\.')[3:] + '(?:$|\s)'
             # regex = re.compile(rxString)
             # return regex.match(hostname)
+            if hostname in pattern:
+                return True
             h = hostname.replace(pattern.replace('*',''),'')
             if '.' in h:
                 return False
@@ -124,25 +131,38 @@ class SecureCurl(object):
         # print "subject: %s" % cert.get_subject().commonName
 
         # Verify hostname match
-        hostname = conn.get_servername()
-        pattern = cert.get_subject().commonName
+        if depth == 0:
+            hostname = conn.get_servername()
+            pattern = cert.get_subject().commonName
+            SAN = []
+            for i in range(cert.get_extension_count()):
+                if cert.get_extension(i).get_short_name() == 'subjectAltName':
+                    # print cert.get_extension(i).get_data(), '----'
+                    # print cert.get_extension(i).get_data().split('0')
+                    # print '?' in cert.get_extension(i).get_data()
+                    SAN= ''.join(i  if ord(i) < 128 else '||||' for i in cert.get_extension(i).get_data())
+                    SAN = SAN.split('||||')
+                    SAN = [str(x[1:]) for x in SAN[1:]]
+            SAN += [pattern]
+            if not any([self.hostname_match(hostname, i) for i in SAN]):
+                #sys.stderr.write("Certificate verification failed: Hostname did not match\n")
+                return False
 
-
-        if depth == 0 and not self.hostname_match(hostname, pattern):
-            sys.stderr.write("Certificate verification failed: Hostname did not match\n")
-            return False
+        # if depth == 0 and not any([self.hostname_match(hostname, pattern) for patern in SAN]):
+        #     sys.stderr.write("Certificate verification failed: Hostname did not match\n")
+        #     return False
 
         # If we want to allow stale certificates check the expiration date on the certificate
         if self.allow_stale_certs is not None:
             expire_date = datetime.datetime.strptime(cert.get_notAfter(), "%Y%m%d%H%M%SZ")
             expired_ago = datetime.datetime.now() - expire_date
             if expired_ago.days > self.allow_stale_certs:
-                sys.stderr.write("Certificate verification failed: Expired more then %d days ago.\n" % self.allow_stale_certs)
+                #sys.stderr.write("Certificate verification failed: Expired more then %d days ago.\n" % self.allow_stale_certs)
                 return False
 
         elif cert.has_expired():
             # Allow stale certificated was not specify so simply check to see if it's expired or not
-            sys.stderr.write("Certificate verification failed: Expired certificate.\n")
+            #sys.stderr.write("Certificate verification failed: Expired certificate.\n")
             return False
 
         # Dealing with a pinned certificate
@@ -153,17 +173,17 @@ class SecureCurl(object):
                 pinned_cert_buff = f.read()
                 f.close()
             except:
-                sys.stderr.write("Error reading pinned certificate file: %s\n" % self.pinnedcertificate)
-                exit(1)
+                #sys.stderr.write("Error reading pinned certificate file: %s\n" % self.pinnedcertificate)
+                return False
 
             # Check to make sure that the certificates match exactly by checking the SHA 256 hash
-            pinned_cert = OpenSSL.crypto.load_certificate(pinned_cert_buff)
+            pinned_cert = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, pinned_cert_buff)
             pinned_cert_digest = pinned_cert.digest(b"sha256")
             server_cert_digest = cert.digest(b"sha256")
 
             if pinned_cert_digest != server_cert_digest:
                 # SHA-256 hashes did not match
-                sys.stderr.write("Certificate verification failed: Mismatched SHA 256.\n")
+                #sys.stderr.write("Certificate verification failed: Mismatched SHA 256.\n")
                 return False
 
         # Check to see if it's on the CRL if we were provided a CRL file
@@ -208,6 +228,7 @@ class SecureCurl(object):
             exit(1)
         except OpenSSL.SSL.Error:
             # Certificate verification failed
+            sys.stderr.write("Could not do handshake, METHOD not supported.\n")
             sys.stderr.flush()
             exit(1)
 
@@ -230,6 +251,7 @@ class SecureCurl(object):
             request = format_http_request(host)
             connection.send(request)
 
+            body = ''
             # Now that the handshake and request have been completed
             # Receive chunks of data from the socket
             while True:
@@ -238,26 +260,47 @@ class SecureCurl(object):
                 except OpenSSL.SSL.ZeroReturnError:
                     # End of content
                     break
+                    # pass
                 except OpenSSL.SSL.WantReadError:
                     # Something happened
                     break
+                    # pass
                 except OpenSSL.SSL.SysCallError:
                     # End of file
                     break
+                    # pass
                 except OpenSSL.SSL.Error:
                     sys.stderr.write("Connection died unexpectedly.\n")
                     break
 
                 # Make sure not to print out the packet end mark
+
+                
+                # if packet.endswith(self.packet_end):
+                #     sys.stdout.write(packet[:packet.index(self.packet_end)])
+                # else:
+                #     sys.stdout.write(packet)
+                # sys.stdout.flush()
+                
+
+                
                 if packet.endswith(self.packet_end):
-                    sys.stdout.write(packet[:packet.index(self.packet_end)])
+                    body += packet[:packet.index(self.packet_end)]
                 else:
-                    sys.stdout.write(packet)
-                sys.stdout.flush()
+                    body += packet
+                
 
                 # Check for end of content
-                if packet.endswith(self.packet_end) or len(packet) == 0:
-                    break
+                # if packet.endswith(self.packet_end) or len(packet) == 0:
+                #     break
+
+
+            if '\r\n\r\n' in body:
+                body = body[body.index('\r\n\r\n') + 4:]
+            sys.stdout.write(body)
+            sys.stdout.flush()
+
+
 
             connection.shutdown()
             connection.close()
@@ -265,15 +308,14 @@ class SecureCurl(object):
 def get_SSL_method(args):
     # This function is for getting the SSL method
     # based on the command line arguments
-
-    if args.tlsv1_0:
-        return OpenSSL.SSL.TLSv1_METHOD
-    elif args.tlsv1_1:
-        return OpenSSL.SSL.TLSv1_1_METHOD
+    if args.sslv3:
+        return OpenSSL.SSL.SSLv3_METHOD
     elif args.tlsv1_2:
         return OpenSSL.SSL.TLSv1_2_METHOD
-    elif args.sslv3:
-        return OpenSSL.SSL.SSLv3_METHOD
+    elif args.tlsv1_1:
+        return OpenSSL.SSL.TLSv1_1_METHOD
+    elif args.tlsv1_0:
+        return OpenSSL.SSL.TLSv1_METHOD
     else:
         # Default to TLS 1.2
         return OpenSSL.SSL.TLSv1_2_METHOD
