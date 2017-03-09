@@ -22,6 +22,7 @@ class SecureCurl(object):
 
     def __init__(self, method, ciphers=None, crlfile=None, pinnedcertificate=None,
                  cacert=None, allow_stale_certs=False):
+        self.error = ''
 
         self.default_port = 443 # Default port for HTTPS requests
         self.packet_end = b'\r\n\r\n' # End of buffer
@@ -146,6 +147,7 @@ class SecureCurl(object):
             SAN += [pattern]
             if not any([self.hostname_match(hostname, i) for i in SAN]):
                 #sys.stderr.write("Certificate verification failed: Hostname did not match\n")
+                self.error = "Certificate verification failed: Hostname did not match"
                 return False
 
         # if depth == 0 and not any([self.hostname_match(hostname, pattern) for patern in SAN]):
@@ -158,11 +160,13 @@ class SecureCurl(object):
             expired_ago = datetime.datetime.now() - expire_date
             if expired_ago.days > self.allow_stale_certs:
                 #sys.stderr.write("Certificate verification failed: Expired more then %d days ago.\n" % self.allow_stale_certs)
+                self.error = "Certificate Expired more than %d days ago." % self.allow_stale_certs
                 return False
 
         elif cert.has_expired():
             # Allow stale certificated was not specify so simply check to see if it's expired or not
             #sys.stderr.write("Certificate verification failed: Expired certificate.\n")
+            self.error = "Expired certificate."
             return False
 
         # Dealing with a pinned certificate
@@ -174,6 +178,7 @@ class SecureCurl(object):
                 f.close()
             except:
                 #sys.stderr.write("Error reading pinned certificate file: %s\n" % self.pinnedcertificate)
+                self.error = "Error reading pinned certificate file"
                 return False
 
             # Check to make sure that the certificates match exactly by checking the SHA 256 hash
@@ -181,9 +186,10 @@ class SecureCurl(object):
             pinned_cert_digest = pinned_cert.digest(b"sha256")
             server_cert_digest = cert.digest(b"sha256")
 
-            if pinned_cert_digest != server_cert_digest:
+            if (pinned_cert_digest != server_cert_digest):
                 # SHA-256 hashes did not match
                 #sys.stderr.write("Certificate verification failed: Mismatched SHA 256.\n")
+                self.error = "Certificate verification failed: Mismatched SHA 256"
                 return False
 
         # Check to see if it's on the CRL if we were provided a CRL file
@@ -193,7 +199,8 @@ class SecureCurl(object):
             # I haven't been able to test this yet
             serial_number = "%X" % cert.get_serial_number()
             if serial_number in self.revocations:
-                sys.stderr.write("Certificate verification failed: Serial number in CRL.\n")
+                # sys.stderr.write("Certificate verification failed: Serial number in CRL.\n")
+                self.error = "Serial number in CRL."
                 return False
 
         return True
@@ -228,7 +235,10 @@ class SecureCurl(object):
             exit(1)
         except OpenSSL.SSL.Error:
             # Certificate verification failed
-            sys.stderr.write("Could not do handshake, METHOD not supported.\n")
+            if self.error == '':
+                sys.stderr.write("Could not do handshake, METHOD not supported.\n")
+            else : 
+                sys.stderr.write("Could not do handshake, error in VERIFY : "+self.error+"\n")
             sys.stderr.flush()
             exit(1)
 
@@ -270,6 +280,7 @@ class SecureCurl(object):
                     break
                     # pass
                 except OpenSSL.SSL.Error:
+
                     sys.stderr.write("Connection died unexpectedly.\n")
                     break
 
@@ -348,7 +359,7 @@ def format_http_request(url):
               "Host: %s\r\n" \
               "User-Agent: curl/7.52.1\r\n"\
               "Accept: */*\r\n\r\n" \
-              "Connection: keep-alive" % url
+              "Connection: keep-alive\r\n\r\n" % url
     return request
 
 def scurl(args):
