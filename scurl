@@ -80,6 +80,7 @@ class SecureCurl(object):
 
             # CA Certificate was loaded properly so specify that it should be used
             context.use_certificate(ca_crt)
+            # context.set_client_ca_list([ca_crt.get_issuer()])
 
         # Set the verify callback
         try:
@@ -130,6 +131,22 @@ class SecureCurl(object):
         # print "Server name: %s" % conn.get_servername()
         # print "Certificate %s" % cert
         # print "subject: %s" % cert.get_subject().commonName
+
+
+        if self.cacert is not None:
+            try:
+                f = open(self.cacert, 'r')
+                crt_buff = f.read()
+                f.close()
+                ca_crt = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, crt_buff)
+                if ca_crt.get_issuer()!= cert.get_issuer():
+                    self.error = "The certificate provided was not in the cacert file." 
+                    return False
+            except:
+                sys.stderr.write("Error loading CA certificate from: %s\n" % self.cacert)
+                exit(1)
+
+
 
         # Verify hostname match
         if depth == 0:
