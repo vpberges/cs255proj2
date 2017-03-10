@@ -34,6 +34,7 @@ class SecureCurl(object):
         self.method = method
         self.crlfile = crlfile
         self.cacert = cacert
+        self.cacert_used = False
         self.pinnedcertificate = pinnedcertificate
         self.allow_stale_certs = allow_stale_certs
 
@@ -133,14 +134,16 @@ class SecureCurl(object):
         # print "subject: %s" % cert.get_subject().commonName
 
 
-        if self.cacert is not None:
+        if (self.cacert is not None) and not (self.cacert_used):
             try:
                 f = open(self.cacert, 'r')
                 crt_buff = f.read()
                 f.close()
                 ca_crt = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, crt_buff)
-                if ca_crt.get_issuer()!= cert.get_issuer():
-                    self.error = "The certificate provided was not in the cacert file." 
+                if ca_crt.get_issuer()== cert.get_issuer():
+                    self.cacert_used = True
+                if (ca_crt.get_issuer()!= cert.get_issuer()) and depth == 0:
+                    self.error = 'The cacert provided does not appear in the chain of certificates'
                     return False
             except:
                 sys.stderr.write("Error loading CA certificate from: %s\n" % self.cacert)
