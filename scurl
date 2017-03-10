@@ -191,14 +191,15 @@ class SecureCurl(object):
                 self.error = "Certificate Expired more than %d days ago." % self.allow_stale_certs
                 return False
 
-        elif cert.has_expired():
-            # Allow stale certificated was not specify so simply check to see if it's expired or not
-            #sys.stderr.write("Certificate verification failed: Expired certificate.\n")
-            self.error = "Expired certificate."
-            return False
+        elif cert.has_expired() :
+            if not ((self.pinnedcertificate is not None) and (depth == 0)):
+                # Allow stale certificated was not specify so simply check to see if it's expired or not
+                #sys.stderr.write("Certificate verification failed: Expired certificate.\n")
+                self.error = "Expired certificate."
+                return False
 
         # Dealing with a pinned certificate
-        if self.pinnedcertificate is not None:
+        if (self.pinnedcertificate is not None) and (depth == 0):
 
             try:
                 f = open(self.pinnedcertificate, 'r')
