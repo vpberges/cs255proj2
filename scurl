@@ -27,7 +27,7 @@ class SecureCurl(object):
         self.default_port = 443 # Default port for HTTPS requests
         self.packet_end = b'\r\n\r\n' # End of buffer
         self.timeout = 1 # socket.rev() timeout in seconds
-        self.buffer_size = 1024 # Buffer size for packet recieving in bytes
+        self.buffer_size = 2048 # Buffer size for packet recieving in bytes
 
         # Set instance vairables based on those from construction
         self.ciphers = ciphers
@@ -328,10 +328,11 @@ class SecureCurl(object):
                 
 
                 
-                if packet.endswith(self.packet_end):
-                    body += packet[:packet.index(self.packet_end)]
-                else:
-                    body += packet
+                # if packet.endswith(self.packet_end):
+                #     body += packet[:packet.index(self.packet_end)]
+                # else:
+                #     body += packet
+                body += packet
                 
 
                 # Check for end of content
@@ -341,8 +342,8 @@ class SecureCurl(object):
             if '\r\n\r\n' in body:
                 body = body[body.index('\r\n\r\n') + 4:]
 
-            if '<!' in body:
-                body = body[body.index('<!'):]
+            # if '<!' in body:
+            #     body = body[body.index('<!'):]
             sys.stdout.write(body)
             sys.stdout.flush()
 
