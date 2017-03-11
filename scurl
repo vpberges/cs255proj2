@@ -437,18 +437,22 @@ def main():
 
     parser.add_argument("--cacert", help="(TLS) Tells curl to use ONLY the specified certificate file to verify the peer. The file may contain only one CA certificate. The certificate must be in PEM format. Normally curl is built to use a default file for this, so this option is typically used to alter that default file.")
 
-    parser.add_argument("--allow-stale-certs", type=int, dest="allow_stale_certs", help="Accept a certificate C as valid if (a) C is an otherwise valid certificate that has expired and (b) C expired within the past N days.")
+    parser.add_argument("--allow-stale-certs", dest="allow_stale_certs", help="Accept a certificate C as valid if (a) C is an otherwise valid certificate that has expired and (b) C expired within the past N days.")
 
     parser.add_argument("--pinnedcertificate", help="Provide a public-key certificate file in PEM format. When a user passes this argument, the TLSl client will only send an application data to server if the server's TLS certificate is exactly the one contained in the specified file. This option will overrride everything else.")
 
 
-    def in_case_of_parse_error(shit):
+    def in_case_of_parse_error(text):
+        print text
         sys.stderr.write("Your query in invalid, use --help for assistance.\n")
         exit(1)
     parser.error = in_case_of_parse_error
     args = parser.parse_args()
 
-
+    try:
+        args.allow_stale_certs = int(args.allow_stale_certs)
+    except:
+        parser.error("--allow-stale-certs must be non-negative integer.")
 
     # Make sure that a non-negative integer was passed to this argument
     if args.allow_stale_certs is not None and args.allow_stale_certs < 0:
