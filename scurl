@@ -284,14 +284,14 @@ class SecureCurl(object):
 
         for url in urls:
             # Parse hostname and port from the url
-            host, port = get_host_port(url)
+            host, port, path = get_host_port(url)
             port = port if port is not None else self.default_port
 
             # Make connection and do handshake
             connection = self.setup_connection(host, port)
 
             # Make a HTTP request
-            request = format_http_request(host)
+            request = format_http_request(host, path)
             connection.send(request)
 
             body = ''
@@ -384,15 +384,23 @@ def get_host_port(url):
     else:
         host, port = host_port, None
 
-    return host, port
+    if host == parsed.path:
+        path = ''
+    else:
+        path = parsed.path
 
-def format_http_request(url):
+    return host, port, parsed.path
+
+def format_http_request(host, path):
     # This is how to format an HTTP request
-    request = "GET / HTTP/1.0\r\n" \
+
+    path = '/' if path == '' else path
+
+    request = "GET %s HTTP/1.0\r\n" \
               "Host: %s\r\n" \
-              "User-Agent: curl/7.35.0\r\n"\
-              "Accept: */*\r\n\r\n" \
-              "Connection: keep-alive\r\n\r\n" % url
+              "User-Agent: curl/7.53.1\r\n"\
+              "Accept: */*\r\n\r\n"  % (path, host)
+
     return request
 
 def scurl(args):
@@ -460,6 +468,7 @@ def main():
 
     # Pass off arguments to be curl'd
     scurl(args)
+
 
 if __name__ == '__main__':
     main()
