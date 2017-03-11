@@ -347,8 +347,8 @@ class SecureCurl(object):
             if '\r\n\r\n' in body:
                 body = body[body.index('\r\n\r\n') + 4:]
 
-            if '<!' in body:
-                body = body[body.index('<!'):]
+            # if '<!' in body:
+            #     body = body[body.index('<!'):]
             sys.stdout.write(body)
             sys.stdout.flush()
 
