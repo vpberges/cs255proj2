@@ -443,14 +443,14 @@ def main():
 
 
     def in_case_of_parse_error(text):
-        print text
         sys.stderr.write("Your query in invalid, use --help for assistance.\n")
         exit(1)
     parser.error = in_case_of_parse_error
     args = parser.parse_args()
 
     try:
-        args.allow_stale_certs = int(args.allow_stale_certs)
+        if args.allow_stale_certs is not None:
+            args.allow_stale_certs = int(args.allow_stale_certs)
     except:
         parser.error("--allow-stale-certs must be non-negative integer.")
 
