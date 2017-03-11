@@ -338,14 +338,8 @@ class SecureCurl(object):
                 # if packet.endswith(self.packet_end) or len(packet) == 0:
                 #     break
 
-            # tmp = '\r\n'
-            # while tmp in body:
-            #     print body[:body.index(tmp)]
-            #     body = body[body.index(tmp) + len(tmp):]
-            #     print '\n\n\n_______________________________\n'
-
-            if '\r\n\r\n' in body:
-                body = body[body.index('\r\n\r\n') + 4:]
+            if '\r\n' in body:
+                body = body[body.index('\r\n') + 2:]
 
             # if '<!' in body:
             #     body = body[body.index('<!'):]
