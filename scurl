@@ -221,7 +221,7 @@ class SecureCurl(object):
                 pinned_cert_buff = f.read()
                 f.close()
             except:
-                self.error = "Error reading pinned certificate file"
+                self.error = "Error reading pinned certificate file: %s" % self.pinnedcertificate
                 return False
 
             # Check to make sure that the certificates match exactly by checking the SHA 256 hash
@@ -244,6 +244,7 @@ class SecureCurl(object):
                 self.error = "Serial number in CRL."
                 return False
 
+        # Nothing failed verification!
         return True
 
     def setup_connection(self, host, port):
@@ -315,32 +316,27 @@ class SecureCurl(object):
                 except OpenSSL.SSL.ZeroReturnError:
                     # End of content
                     break
-                    # pass
                 except OpenSSL.SSL.WantReadError:
                     # Something happened
                     break
-                    # pass
                 except OpenSSL.SSL.SysCallError:
                     # End of file
                     break
-                    # pass
                 except OpenSSL.SSL.Error:
-
                     sys.stderr.write("Connection died unexpectedly.\n")
                     break
 
                 # Make sure not to print out the packet end mark
                 body += packet
 
-
             if '\r\n\r\n' in body:
                 body = body[body.index('\r\n\r\n') + 4:]
 
+            # Write/flush the content to stdout
             sys.stdout.write(body)
             sys.stdout.flush()
 
-
-
+            # Close the connection
             connection.shutdown()
             connection.close()
 
@@ -402,21 +398,24 @@ def format_http_request(host, path):
     return request
 
 def scurl(args):
-    # This function takes the
+    # This function instantiates a SecureCurl object with the data provided from the command lie
+    # and curls all of the URLs provided on the command line
 
     # Get the specified version of TLS to use
     method = get_SSL_method(args)
 
     # Instantiate a secure curler
-    secure_curler = SecureCurl(method,
-                               ciphers=args.ciphers,
-                               crlfile=args.crlfile,
-                               pinnedcertificate=args.pinnedcertificate,
-                               cacert=args.cacert,
+    secure_curler = SecureCurl(method, ciphers=args.ciphers, crlfile=args.crlfile,
+                               pinnedcertificate=args.pinnedcertificate, cacert=args.cacert,
                                allow_stale_certs=args.allow_stale_certs)
 
-    # curl all the URLS
+    # curl all the URLS from the command line arguments
     secure_curler.curl_urls(args.urls)
+
+def in_case_of_parse_error(error_text):
+    # This function is called if there was a problem with parsing the arguments from
+    sys.stderr.write("Your query in invalid, use --help for assistance.\n")
+    exit(1)
 
 def main():
     # Command Line Argument parsing
@@ -440,7 +439,8 @@ def main():
 
     parser.add_argument("--ciphers", help="(TLS) Specify which ciphers to use in the connection with a colon-separated list.")
 
-    parser.add_argument("--crlfile", help="(TLS) Provide a file using PEM format with a Certificate Revocation List that may specify peer certificates that are to be considered revoked.")
+    parser.add_argument("--crlfile", help="(TLS) Provide a file using PEM format with a Certificate Revocation List"
+                                          " that may specify peer certificates that are to be considered revoked.")
 
     parser.add_argument("--cacert", help="(TLS) Tells curl to use ONLY the specified certificate file to verify the peer. The file may contain only one CA certificate. The certificate must be in PEM format. Normally curl is built to use a default file for this, so this option is typically used to alter that default file.")
 
@@ -449,24 +449,22 @@ def main():
     parser.add_argument("--pinnedcertificate", help="Provide a public-key certificate file in PEM format. When a user passes this argument, the TLSl client will only send an application data to server if the server's TLS certificate is exactly the one contained in the specified file. This option will overrride everything else.")
 
 
-    def in_case_of_parse_error(text):
-        sys.stderr.write("Your query in invalid, use --help for assistance.\n")
-        exit(1)
-
+    # Set the error callback and parse command line arguments
     parser.error = in_case_of_parse_error
     args = parser.parse_args()
 
+    # Try converting the allow_stale_certs argument into an integer
     try:
         if args.allow_stale_certs is not None:
             args.allow_stale_certs = int(args.allow_stale_certs)
     except:
-        parser.error("--allow-stale-certs must be non-negative integer.")
+        parser.error()
 
     # Make sure that a non-negative integer was passed to this argument
     if args.allow_stale_certs is not None and args.allow_stale_certs < 0:
-        parser.error("--allow-stale-certs must be non-negative integer.")
+        parser.error()
 
-    # Pass off arguments to be curl'd
+    # Pass off the parsed arguments to be curl'd
     scurl(args)
 
 
