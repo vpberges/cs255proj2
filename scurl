@@ -150,7 +150,7 @@ class SecureCurl(object):
                 sys.stderr.write("Error parsing CA certificate from: %s\n" % self.cacert)
                 exit(1)
 
-            # Try to see if 
+            # Try to see if the issuers match
             try:
                 if ca_crt.get_issuer() == cert.get_issuer():
                     self.cacert_used = True
@@ -163,31 +163,44 @@ class SecureCurl(object):
                 exit(1)
 
 
-        # Verify hostname match
+        # Verify hostname match but only at the most superficial certificate
         if depth == 0:
+
+            # Retrieve the server's hostname
             hostname = conn.get_servername()
+
+            # Get the common name from the certificate
             pattern = cert.get_subject().commonName
+
             SAN = [pattern]
             authorityKeyIdentifier = ''
             subjectKeyIdentifier = ''
+
             for i in range(cert.get_extension_count()):
+
                 if cert.get_extension(i).get_short_name() == 'authorityKeyIdentifier':
                     authorityKeyIdentifier = cert.get_extension(i).get_data()
+
                 if cert.get_extension(i).get_short_name() == 'subjectKeyIdentifier':
                     subjectKeyIdentifier = cert.get_extension(i).get_data()
+
                 if cert.get_extension(i).get_short_name() == 'subjectAltName':
                     SAN= ''.join(i  if ord(i) < 128 else '||||' for i in cert.get_extension(i).get_data())
                     SAN = SAN.split('||||')
                     SAN = [str(x[1:]) for x in SAN[1:]]
+
+            # Check to see if the authority is in fact the subject (self signed)
             if authorityKeyIdentifier == subjectKeyIdentifier:
                 self.error = 'There is a self signed certificate'
                 return False
+
+            # Check to make sure that the server hostname matches that which was on the certificate
             if not any([self.hostname_match(hostname, i) for i in SAN]):
-                self.error = "Certificate verification failed: Hostname did not match"
+                self.error = "Certificate verification failed: hostnames did not match"
                 return False
 
 
-        # If we want to allow stale certificates check the expiration date on the certificate
+        # If we want to allow stale certificates: check the expiration date on the certificate
         if self.allow_stale_certs is not None:
             expire_date = datetime.datetime.strptime(cert.get_notAfter(), "%Y%m%d%H%M%SZ")
             expired_ago = datetime.datetime.now() - expire_date
@@ -195,11 +208,10 @@ class SecureCurl(object):
                 self.error = "Certificate Expired more than %d days ago." % self.allow_stale_certs
                 return False
 
-        elif cert.has_expired():
-            if not ((self.pinnedcertificate is not None) and (depth == 0)):
-                # Allow stale certificated was not specify so simply check to see if it's expired or not
-                self.error = "Expired certificate."
-                return False
+        # If we aren't allowing stale certificates, just check to see if it's expired
+        elif cert.has_expired() and not (self.pinnedcertificate is not None and depth == 0):
+            self.error = "Expired certificate."
+            return False
 
         # Dealing with a pinned certificate
         if (self.pinnedcertificate is not None) and (depth == 0):
