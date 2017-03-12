@@ -3,6 +3,7 @@ This is the second project in CS 255, "Introduction to Cryptography" taught by D
 
 ## Authors
 Jon Deaton: jdeaton@stanford.edu
+
 Vincent-Pierre Berges: vpberges@stanford.edu
 
 ## Installation
@@ -18,10 +19,3 @@ Just like how you would use curl:
 for example
 
 `$ ./scurl --ciphers DHE-DSS-AES256-SHA:DH-RSA-AES256-SHA https://www.stanford.edu/`
-
-
-## Project TODO list
-1. Verify Hostname matches in certificate verification
-2. Stop listening/timeout when no content end it sent
-3. Make --cacert override --crlfile
-4. Test everything extensively
