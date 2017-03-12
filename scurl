@@ -3,22 +3,19 @@
 CS 255, Winter 2017
 Project 2: scurl - Secure curl
 
-This file contains our implementation of secure curl (scurl). In this implementation we made a class
-called SecureCurl that implements the functionality of
+This file contains our implementation of secure curl (scurl).
 
 Group:
     Jon Deaton, jdeaton@stanford.edu
     Vincent-Pierre Berges, vpberges@stanford.edu
 '''
 
-import os
 import sys
 import OpenSSL
 import socket
 import urlparse
 import argparse
 import datetime
-import re
 
 class SecureCurl(object):
     # This class implements the functionality of curl but with TLS
