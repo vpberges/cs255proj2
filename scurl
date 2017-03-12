@@ -3,6 +3,9 @@
 CS 255, Winter 2017
 Project 2: scurl - Secure curl
 
+This file contains our implementation of secure curl (scurl). In this implementation we made a class
+called SecureCurl that implements the functionality of
+
 Group:
     Jon Deaton, jdeaton@stanford.edu
     Vincent-Pierre Berges, vpberges@stanford.edu
@@ -22,36 +25,33 @@ class SecureCurl(object):
 
     def __init__(self, method, ciphers=None, crlfile=None, pinnedcertificate=None,
                  cacert=None, allow_stale_certs=False):
-        self.error = ''
 
+        # Instance Variables
+        self.error = '' # Buffer containing a single line for errors
         self.default_port = 443 # Default port for HTTPS requests
-        self.packet_end = b'\r\n\r\n' # End of buffer
-        self.timeout = 1 # socket.rev() timeout in seconds
-        self.buffer_size = 2048 # Buffer size for packet recieving in bytes
+        self.packet_end = b'\r\n\r\n' # End of HTTP content indication
+        self.buffer_size = 2048 # Buffer size for packet receiving in bytes
 
-        # Set instance vairables based on those from construction
-        self.ciphers = ciphers
-        self.method = method
-        self.crlfile = crlfile
+        # Set instance variables to match those from constructor
+        self.ciphers = ciphers # Ciphers passed in on the command line
+        self.method = method # Protocol, e.g. OpenSSL.SSL.TLSv1_2_METHOD
+        self.crlfile = crlfile # Certificate Revocation List (CRL) file
         self.cacert = cacert
         self.cacert_used = False
         self.pinnedcertificate = pinnedcertificate
         self.allow_stale_certs = allow_stale_certs
 
-        # The verification mode used for Context.set_verify(mode, calback)
-        # IDK what this is really i just got this from somewhere online
-        # self.verify_mode = OpenSSL.SSL.VERIFY_PEER |\
-        #                    OpenSSL.SSL.VERIFY_FAIL_IF_NO_PEER_CERT | \
-        #                    OpenSSL.SSL.VERIFY_CLIENT_ONCE
-
-        self.verify_mode = OpenSSL.SSL.VERIFY_NONE
         self.verify_mode = OpenSSL.SSL.VERIFY_PEER
 
-        # This will contain a lookup table of hexidecmial encoded certificate cerial numbers
+        # This will contain a lookup table of (capital) hex-encoded certificate serial numbers
         self.revocations = None
+
+        # Set the Certificate Revocation list based on those passed in from the crlfile argument.
         self.set_CRL()
 
     def make_context(self):
+        # This method is for creating a OpenSSL.SSL.Context object to use for the connection
+
         # Initialize the context
         context = OpenSSL.SSL.Context(self.method)
 
@@ -81,18 +81,23 @@ class SecureCurl(object):
 
             # CA Certificate was loaded properly so specify that it should be used
             context.use_certificate(ca_crt)
-            # context.set_client_ca_list([ca_crt.get_issuer()])
 
-        # Set the verify callback
+        # Set the verify callback to be the verify method of this class
         try:
             context.set_verify(self.verify_mode, self.verify)
         except:
+            sys.stderr.write("OpenSSL.SSL.Context creation failed: could not set verification callback.\n")
             exit(1)
 
         return context
 
     def set_CRL(self):
-        # Set the Certificate Revocation List if one was provided by the --crlfile argument
+        # This method sets the Certificate Revocation List (CRL) if one was provided by the --crlfile argument
+        # by loading the contents of the file pointed to by the crlfile attribute of this object into a buffer
+        # and parsing it using the OpenSSL.crypto.load_crl function to parse the file which should be of PEM foramt
+        # (specified by OpenSSL.crypto.FILETYPE_PEM). This method then sets the revocations attribute of this object
+        # to be a lookup set of Hex-encoded serial numbers as strings representing the serial numbers on the CRL.
+
         if self.crlfile is not None:
             try:
                 f = open(self.crlfile, 'r')
@@ -104,17 +109,14 @@ class SecureCurl(object):
 
             # Load the buffer into an OpenSSL CRL object
             crl = OpenSSL.crypto.load_crl(OpenSSL.crypto.FILETYPE_PEM, crl_buff)
+
             # Create a lookup table for revocations. These are formatted as capital hex strings
             self.revocations = set(map(lambda x: x.get_serial(), crl.get_revoked()))
 
     def hostname_match(self, hostname, pattern):
-        # Check to make sure that the host-names match
-        # print hostname, pattern
+        # This function is for checking to see if a hostname matches a pattern that may contains wildcards '*'
 
         if "*" in pattern:
-            # rxString = r'(?:^|\s)(\w+\.)?' + pattern.replace('.', '\.')[3:] + '(?:$|\s)'
-            # regex = re.compile(rxString)
-            # return regex.match(hostname)
             if hostname in pattern:
                 return True
             h = hostname.replace(pattern.replace('*',''),'')
@@ -126,29 +128,39 @@ class SecureCurl(object):
             return hostname == pattern
 
     def verify(self, conn, cert, errnum, depth, ok):
-        # Verify the certificate in the given context
+        # This is the callback function used to verify each certificate in the certificate chain
+        # from the connection established with peer.
 
-        # print "depth: %d" % depth
-        # print "Server name: %s" % conn.get_servername()
-        # print "Certificate %s" % cert
-        # print "subject: %s" % cert.get_subject().commonName
+        # If a CA certificate has been provided to match the root certificate, then check to make sure they match
+        if self.cacert is not None and not self.cacert_used:
 
-
-        if (self.cacert is not None) and not (self.cacert_used):
+            # Load the CA Certificate file into a buffer
             try:
                 f = open(self.cacert, 'r')
                 crt_buff = f.read()
                 f.close()
+            except:
+                sys.stderr.write("Could not read CA certificate file: %s\n" % self.cacert)
+                exit(1)
+
+            # Try parsing the certificate file
+            try:
                 ca_crt = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, crt_buff)
-                if ca_crt.get_issuer()== cert.get_issuer():
+            except:
+                sys.stderr.write("Error parsing CA certificate from: %s\n" % self.cacert)
+                exit(1)
+
+            # Try to see if 
+            try:
+                if ca_crt.get_issuer() == cert.get_issuer():
                     self.cacert_used = True
-                if (ca_crt.get_issuer()!= cert.get_issuer()) and depth == 0:
+
+                if ca_crt.get_issuer()!= cert.get_issuer() and depth == 0:
                     self.error = 'The cacert provided does not appear in the chain of certificates'
                     return False
             except:
-                sys.stderr.write("Error loading CA certificate from: %s\n" % self.cacert)
+                sys.stderr.write("Error with CA certificate: %s\n" % self.cacert)
                 exit(1)
-
 
 
         # Verify hostname match
@@ -164,9 +176,6 @@ class SecureCurl(object):
                 if cert.get_extension(i).get_short_name() == 'subjectKeyIdentifier':
                     subjectKeyIdentifier = cert.get_extension(i).get_data()
                 if cert.get_extension(i).get_short_name() == 'subjectAltName':
-                    # print cert.get_extension(i).get_data(), '----'
-                    # print cert.get_extension(i).get_data().split('0')
-                    # print '?' in cert.get_extension(i).get_data()
                     SAN= ''.join(i  if ord(i) < 128 else '||||' for i in cert.get_extension(i).get_data())
                     SAN = SAN.split('||||')
                     SAN = [str(x[1:]) for x in SAN[1:]]
@@ -174,27 +183,21 @@ class SecureCurl(object):
                 self.error = 'There is a self signed certificate'
                 return False
             if not any([self.hostname_match(hostname, i) for i in SAN]):
-                #sys.stderr.write("Certificate verification failed: Hostname did not match\n")
                 self.error = "Certificate verification failed: Hostname did not match"
                 return False
 
-        # if depth == 0 and not any([self.hostname_match(hostname, pattern) for pattern in SAN]):
-        #     sys.stderr.write("Certificate verification failed: Hostname did not match\n")
-        #     return False
 
         # If we want to allow stale certificates check the expiration date on the certificate
         if self.allow_stale_certs is not None:
             expire_date = datetime.datetime.strptime(cert.get_notAfter(), "%Y%m%d%H%M%SZ")
             expired_ago = datetime.datetime.now() - expire_date
             if expired_ago.days > self.allow_stale_certs:
-                #sys.stderr.write("Certificate verification failed: Expired more then %d days ago.\n" % self.allow_stale_certs)
                 self.error = "Certificate Expired more than %d days ago." % self.allow_stale_certs
                 return False
 
-        elif cert.has_expired() :
+        elif cert.has_expired():
             if not ((self.pinnedcertificate is not None) and (depth == 0)):
                 # Allow stale certificated was not specify so simply check to see if it's expired or not
-                #sys.stderr.write("Certificate verification failed: Expired certificate.\n")
                 self.error = "Expired certificate."
                 return False
 
@@ -206,7 +209,6 @@ class SecureCurl(object):
                 pinned_cert_buff = f.read()
                 f.close()
             except:
-                #sys.stderr.write("Error reading pinned certificate file: %s\n" % self.pinnedcertificate)
                 self.error = "Error reading pinned certificate file"
                 return False
 
@@ -217,7 +219,6 @@ class SecureCurl(object):
 
             if (pinned_cert_digest != server_cert_digest):
                 # SHA-256 hashes did not match
-                #sys.stderr.write("Certificate verification failed: Mismatched SHA 256.\n")
                 self.error = "Certificate verification failed: Mismatched SHA 256"
                 return False
 
@@ -228,7 +229,6 @@ class SecureCurl(object):
             # I haven't been able to test this yet
             serial_number = "%X" % cert.get_serial_number()
             if serial_number in self.revocations:
-                # sys.stderr.write("Certificate verification failed: Serial number in CRL.\n")
                 self.error = "Serial number in CRL."
                 return False
 
@@ -318,32 +318,12 @@ class SecureCurl(object):
                     break
 
                 # Make sure not to print out the packet end mark
-
-                
-                # if packet.endswith(self.packet_end):
-                #     sys.stdout.write(packet[:packet.index(self.packet_end)])
-                # else:
-                #     sys.stdout.write(packet)
-                # sys.stdout.flush()
-                
-
-                
-                # if packet.endswith(self.packet_end):
-                #     body += packet[:packet.index(self.packet_end)]
-                # else:
-                #     body += packet
                 body += packet
-                
 
-                # Check for end of content
-                # if packet.endswith(self.packet_end) or len(packet) == 0:
-                #     break
 
             if '\r\n\r\n' in body:
                 body = body[body.index('\r\n\r\n') + 4:]
 
-            # if '<!' in body:
-            #     body = body[body.index('<!'):]
             sys.stdout.write(body)
             sys.stdout.flush()
 
@@ -353,8 +333,8 @@ class SecureCurl(object):
             connection.close()
 
 def get_SSL_method(args):
-    # This function is for getting the SSL method
-    # based on the command line arguments
+    # This function is for getting the SSL method based on the command line arguments
+    # The first argument is the argparse parsed arguments object
     if args.sslv3:
         return OpenSSL.SSL.SSLv3_METHOD
     elif args.tlsv1_2:
@@ -368,37 +348,49 @@ def get_SSL_method(args):
         return OpenSSL.SSL.TLSv1_2_METHOD
 
 def get_host_port(url):
-    # This function parses the host and port from a provided url
-    # Return: a tuple of host, port where port is None if no port was provided
+    # This function parses the host, port, and path from a provided url
+    # Return: a tuple of host, port, path where port is None if no port was provided
+
     parsed = urlparse.urlparse(url)
+
+    # Get the host and port in format "host:port" from the parsed url object
+    # which may either be in the netloc or path value
     host_port = parsed.netloc if parsed.netloc != '' else parsed.path
 
+    # Separate and typecast the host and port
     if ":" in host_port:
         host, port = host_port.split(":")
         port = int(port)
     else:
+        # Otherwise there was no port
         host, port = host_port, None
 
-    if host == parsed.path:
-        path = ''
-    else:
-        path = parsed.path
+    # If the host and port were found in the path attribute, then use '' as the path
+    path = '' if host_port == parsed.path else parsed.path
 
-    return host, port, parsed.path
+    return host, port, path
 
 def format_http_request(host, path):
-    # This is how to format an HTTP request
+    # This function is for formatting an HTTP request with a given host and path name
 
+    # If the path is empty we want it just to be '/'
     path = '/' if path == '' else path
 
-    request = "GET %s HTTP/1.0\r\n" \
-              "Host: %s\r\n" \
-              "User-Agent: curl/7.53.1\r\n"\
-              "Accept: */*\r\n\r\n"  % (path, host)
+    # Standard HTTP line delimiter and request end indicators
+    line_delimeter = "\r\n"
+    request_end = "\r\n\r\n"
 
+    request_parts = ["GET {path} HTTP/1.0".format(path=path),
+                     "Host: {host}".format(host=host),
+                     "User-Agent: curl/7.53.1",
+                     "Accept: */*"]
+
+    # Format the request and return it
+    request = line_delimeter.join(request_parts) + request_end
     return request
 
 def scurl(args):
+    # This function takes the
 
     # Get the specified version of TLS to use
     method = get_SSL_method(args)
@@ -448,6 +440,7 @@ def main():
     def in_case_of_parse_error(text):
         sys.stderr.write("Your query in invalid, use --help for assistance.\n")
         exit(1)
+
     parser.error = in_case_of_parse_error
     args = parser.parse_args()
 
